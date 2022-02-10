@@ -409,7 +409,7 @@ if opts.doExportPDF
         waitbar(Step/nStep,hWaitBar,'Saving .svg to .pdf file');
     end
 
-    if check_Inkscape_Version(inkscape_path) % inkscape v1
+    if check_Inkscape_Version(opts.DIR_INKSCAPE) % inkscape v1
         cmdtext = sprintf('"%s" "%s.svg" --export-filename="%s.pdf" --export-latex --export-area-drawing',...
             opts.DIR_INKSCAPE, filename, filename);
     else % inkscape v0

@@ -4,9 +4,11 @@ function Plot2LaTeX( h_in, filename, varargin )
 %inclusion into LaTeX. Requires free and open-source vector graphics 
 %editor Inkscape.
 %
-%   options: 'Renderer': e.g. 'opengl', 'painters'
-%            'yCorrFactor': 0.8 (default, in px)
-%            'DIR_INKSC': directory to inkscape.exe
+%   options: 'Renderer':        e.g. 'opengl', 'painters'
+%            'yCorrFactor':     0.8 (default, in px)
+%            'DIR_INKSCAPE':    directory to inkscape.exe
+%            'doWaitbar':       true (default)
+%            'doExportPDF':     true (default)
 %
 %   PLOT2LATEX(h,filename) saves figure with handle h to a file specified by
 %   filename, without extention. Filename can contain a relative location
@@ -203,7 +205,7 @@ for i = 1:n_TexObj % do for text, titles and axes labels
     iLabel = iLabel + 1;
     
     % find text string
-    Labels(iLabel).TrueText = TexObj(i).String;
+    Labels(iLabel).TrueText = TexObj(i).String; %#ok<*AGROW>
     
     % find text aligment
     Labels(iLabel).Alignment = PosAligmentSVG(...
@@ -401,23 +403,29 @@ fclose(fout);
 movefile([filename,'_temp.svg'],[filename,'.svg'])
 
 %% Invoke Inkscape to generate PDF + LaTeX
-if opts.doWaitbar
-    Step = Step + 1;
-    waitbar(Step/nStep,hWaitBar,'Saving .svg to .pdf file');
+if opts.doExportPDF
+    if opts.doWaitbar
+        Step = Step + 1;
+        waitbar(Step/nStep,hWaitBar,'Saving .svg to .pdf file');
+    end
+
+    if check_Inkscape_Version(inkscape_path) % inkscape v1
+        cmdtext = sprintf('"%s" "%s.svg" --export-filename="%s.pdf" --export-latex --export-area-drawing',...
+            opts.DIR_INKSCAPE, filename, filename);
+    else % inkscape v0
+        cmdtext = sprintf('"%s" "%s.svg" --export-pdf "%s.pdf" --export-latex -export-area-drawing',...
+            opts.DIR_INKSCAPE, filename, filename);
+    end
+    [~,cmdout] = system(cmdtext);
+
+    % test if a .pdf and .pdf_tex file exist
+    if exist([filename,'.pdf'],'file')~= 2 || exist([filename,'.pdf_tex'],'file')~= 2
+        warning([' - Plot2LaTeX: No .pdf or .pdf_tex file produced, please check your Inkscape installation and specify installation directory correctly: ', cmdout])
+    end
 end
 
 
-
-cmdtext = sprintf('"%s" "%s.svg" --export-filename="%s.pdf" --export-latex --export-area-drawing',...
-    opts.DIR_INKSCAPE, filename, filename);
-[status,cmdout] = system(cmdtext);
-            
-% test if a .pdf and .pdf_tex file exist
-if exist([filename,'.pdf'],'file')~= 2 || exist([filename,'.pdf_tex'],'file')~= 2
-    warning([' - Plot2LaTeX: No .pdf or .pdf_tex file produced, please check your Inkscape installation and specify installation directory correctly: ', cmdout])
-end
-
-
+%% Clean up
 if opts.doWaitbar
     close(hWaitBar);
 end
@@ -579,14 +587,33 @@ end
 end
 
 %% ------------------------------------------------------------------------
-function isValid = check_Inkscape_Dir(path)
+function isValid = check_Inkscape_Dir(inkscape_path)
 % isValid = CHECK_INKSCAPE_DIR(path) checks if the path to inkscape is
 % correct
-[status, result] = system([path,' --help']);
+[status, result] = system([inkscape_path,' --help']);
 isValid = ~isempty(strfind(result,'-export-area-drawing')) && ...
           ~isempty(strfind(result,'--export-latex')) && ...
           ~isempty(strfind(result,'--export-pdf')) && status == 0;
 if status ~= 0 && status ~= 1
-    warning([' - check_Inkscape_Dir.m: system(''',path,' --help'') was not successful. System response was ',num2str(status),'.'])
+    warning([' - check_Inkscape_Dir.m: system(''',inkscape_path,' --help'') was not successful. System response was ',num2str(status),'.'])
+end
+end
+
+%% ------------------------------------------------------------------------
+function [isAbove1, version]= check_Inkscape_Version(inkscape_path)
+% isValid = CHECK_INKSCAPE_VERSION(path) checks if inkscape is
+% in version 1 or above
+[status, result] = system([inkscape_path,' --version']);
+[reg_idx,reg_idx_end] = regexp(result,'Inkscape [0-9.]+','ONCE');
+isValid = ~isempty(reg_idx) && status == 0;
+
+if isValid
+    version = result(reg_idx+length('Inkscape '):reg_idx_end);
+    [reg_idx,reg_idx_end] = regexp(version,'[0-9]+','ONCE');
+    isAbove1 = num2str(version(reg_idx:reg_idx_end)) >= 1;
+else
+    version = '';
+    isAbove1 = false;
+    warning([' - check_Inkscape_Version.m: system(''',inkscape_path,' --version'') was not successful. System response was ',num2str(status),'.'])
 end
 end

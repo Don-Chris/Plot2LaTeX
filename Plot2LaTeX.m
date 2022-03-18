@@ -96,7 +96,7 @@ function Plot2LaTeX( h_in, filename, varargin )
 %   - Size difference .svg and .fig if specifying units other than px.
 %       (Matlab limitation?)
 %
-%   Version:  1.3
+%   Version:  1.3 / 1.4
 %   Autor:    C. Schulte
 %   Date:     10.02.2022
 %   Contact:  C.Schulte@irt.rwth-aachen.de
@@ -121,6 +121,10 @@ function Plot2LaTeX( h_in, filename, varargin )
 %   - waitbar optional
 %   - export to pdf optional
 %   - works with inkscape v1
+%   v 1.4 - 18/03/2022
+%   - string as input allowed
+%   - closes the file, if the programm could not finish
+%   - inkscape path with white spaces allowed
 
 
 %% Create a figure copy
@@ -129,6 +133,9 @@ if ~strcmp(h_in.Type,'figure')
 end
 h = copy_Figure(h_in);
 
+if isstring(filename)
+    filename = isstring(filename);
+end
 
 %% Config
 if ~isempty(getenv('DIR_INKSCAPE')) % check if environment variable already exists
@@ -158,9 +165,12 @@ end
 %% test if inkscape installation is correct
 inkscape_valid = check_Inkscape_Dir(opts.DIR_INKSCAPE);
 if ~inkscape_valid
-    opts.DIR_INKSCAPE = uigetfile('inkscape.exe',[opts.DIR_INKSCAPE, ' cannot be found, please select "inkscape.exe".']');
+    [file,pathname] = uigetfile('inkscape.exe',[opts.DIR_INKSCAPE, ' cannot be found, please select "inkscape.exe".']');
+    opts.DIR_INKSCAPE = fullfile(pathname,file);
     if check_Inkscape_Dir(opts.DIR_INKSCAPE)
         setenv('DIR_INKSCAPE',opts.DIR_INKSCAPE);
+    else
+        error([' - Plot2LaTeX: Inkscape Installation not found.  Matlab command "system(''"',opts.DIR_INKSCAPE,'" --version'')" was not successful.'])
     end
 else 
     setenv('DIR_INKSCAPE',opts.DIR_INKSCAPE);
@@ -350,57 +360,61 @@ for iLabel = 1:nLabel
     Labels(iLabel).XMLText = EscapeXML(Labels(iLabel).TrueText);
 end
 
+try
+    fin = fopen([filename,'.svg']); % open svg file
+    fout = fopen([filename,'_temp.svg'],'w'); % make a temp file for modification
 
-fin = fopen([filename,'.svg']); % open svg file
-fout = fopen([filename,'_temp.svg'],'w'); % make a temp file for modification
+    StrLine_new = fgetl(fin);%skip first line
+    iLine = 1; % Line number
+    nFoundLabel = 0; % Counter of number of found labels
+    while ~feof(fin)
+        StrPref = StrLine_new; % process new line
+        iLine = iLine + 1;
+        StrLine_old = fgetl(fin);
 
-StrLine_new = fgetl(fin);%skip first line
-iLine = 1; % Line number
-nFoundLabel = 0; % Counter of number of found labels
-while ~feof(fin)
-    StrPref = StrLine_new; % process new line
-    iLine = iLine + 1;
-    StrLine_old = fgetl(fin);
-    
-    FoundLabelText = regexp(StrLine_old,'>\S*</text','match'); %try to find label
-    StrLine_new = StrLine_old;
-    if ~isempty(FoundLabelText)
-        nFoundLabel = nFoundLabel + 1;
-        iLabel = find(ismember(...
-                          	{Labels.LabelText},...
-                            FoundLabelText{1}(2:end-6))); % find label number
-                        
-        % Append text alignment in prevous line
-        StrPrefTemp = [StrPref(1:end-1),...
-                        'text-align:', Labels(iLabel).Alignment{1},...
-                        ';text-anchor:', Labels(iLabel).Anchor{1}, '"'];
-                    
-        % correct x - position offset
-        StrPrefTemp = regexprep(StrPrefTemp,'x="\S*"','x="0"');
-        
-        % correct y - position offset, does not work correctly
-        [startIndex,endIndex] = regexp(StrPrefTemp,'y="\S*"');
-        yOffset = str2double(StrPrefTemp((startIndex+3):(endIndex-1)));
-        StrPrefTemp = regexprep(...
-                            StrPrefTemp,...
-                            'y="\S*"',...
-                            ['y="', num2str(yOffset*opts.yCorrFactor), '"']); 
-        
-        % Replace label with original string
-        StrCurrTemp = strrep(StrLine_old, ...
-                                FoundLabelText,...
-                                ['>',Labels(iLabel).XMLText,'</text']);
-                            
-        StrLine_new = StrCurrTemp{:};
-        StrPref = StrPrefTemp;
+        FoundLabelText = regexp(StrLine_old,'>\S*</text','match'); %try to find label
+        StrLine_new = StrLine_old;
+        if ~isempty(FoundLabelText)
+            nFoundLabel = nFoundLabel + 1;
+            iLabel = find(ismember(...
+                                {Labels.LabelText},...
+                                FoundLabelText{1}(2:end-6))); % find label number
+
+            % Append text alignment in prevous line
+            StrPrefTemp = [StrPref(1:end-1),...
+                            'text-align:', Labels(iLabel).Alignment{1},...
+                            ';text-anchor:', Labels(iLabel).Anchor{1}, '"'];
+
+            % correct x - position offset
+            StrPrefTemp = regexprep(StrPrefTemp,'x="\S*"','x="0"');
+
+            % correct y - position offset, does not work correctly
+            [startIndex,endIndex] = regexp(StrPrefTemp,'y="\S*"');
+            yOffset = str2double(StrPrefTemp((startIndex+3):(endIndex-1)));
+            StrPrefTemp = regexprep(...
+                                StrPrefTemp,...
+                                'y="\S*"',...
+                                ['y="', num2str(yOffset*opts.yCorrFactor), '"']); 
+
+            % Replace label with original string
+            StrCurrTemp = strrep(StrLine_old, ...
+                                    FoundLabelText,...
+                                    ['>',Labels(iLabel).XMLText,'</text']);
+
+            StrLine_new = StrCurrTemp{:};
+            StrPref = StrPrefTemp;
+        end
+        fprintf(fout,'%s\n',StrPref);
     end
-    fprintf(fout,'%s\n',StrPref);
-end
-fprintf(fout,'%s\n',StrLine_new);
+    fprintf(fout,'%s\n',StrLine_new);
 
-fclose(fin);
-fclose(fout);
-movefile([filename,'_temp.svg'],[filename,'.svg'])
+    fclose(fin);
+    fclose(fout);
+    movefile([filename,'_temp.svg'],[filename,'.svg'])
+catch
+    fclose(fin);
+    fclose(fout);
+end
 
 %% Invoke Inkscape to generate PDF + LaTeX
 if opts.doExportPDF
@@ -408,8 +422,7 @@ if opts.doExportPDF
         Step = Step + 1;
         waitbar(Step/nStep,hWaitBar,'Saving .svg to .pdf file');
     end
-
-    if check_Inkscape_Version(opts.DIR_INKSCAPE) % inkscape v1
+    if check_Inkscape_Version(opts.DIR_INKSCAPE)
         cmdtext = sprintf('"%s" "%s.svg" --export-filename="%s.pdf" --export-latex --export-area-drawing',...
             opts.DIR_INKSCAPE, filename, filename);
     else % inkscape v0
@@ -590,7 +603,7 @@ end
 function isValid = check_Inkscape_Dir(inkscape_path)
 % isValid = CHECK_INKSCAPE_DIR(path) checks if the path to inkscape is
 % correct
-[status, result] = system([inkscape_path,' --help']);
+[status, result] = system(['"',inkscape_path,'" --help']);
 isValid = ~isempty(strfind(result,'-export-area-drawing')) && ...
           ~isempty(strfind(result,'--export-latex')) && ...
           ~isempty(strfind(result,'--export-pdf')) && status == 0;
@@ -600,20 +613,20 @@ end
 end
 
 %% ------------------------------------------------------------------------
-function [isAbove1, version]= check_Inkscape_Version(inkscape_path)
+function [isAboveV1, version]= check_Inkscape_Version(inkscape_path)
 % isValid = CHECK_INKSCAPE_VERSION(path) checks if inkscape is
 % in version 1 or above
-[status, result] = system([inkscape_path,' --version']);
+[status, result] = system(['"',inkscape_path,'" --version']);
 [reg_idx,reg_idx_end] = regexp(result,'Inkscape [0-9.]+','ONCE');
 isValid = ~isempty(reg_idx) && status == 0;
 
 if isValid
     version = result(reg_idx+length('Inkscape '):reg_idx_end);
     [reg_idx,reg_idx_end] = regexp(version,'[0-9]+','ONCE');
-    isAbove1 = num2str(version(reg_idx:reg_idx_end)) >= 1;
+    isAboveV1 = num2str(version(reg_idx:reg_idx_end)) >= 1;
 else
     version = '';
-    isAbove1 = false;
+    isAboveV1 = false;
     warning([' - check_Inkscape_Version.m: system(''',inkscape_path,' --version'') was not successful. System response was ',num2str(status),'.'])
 end
 end

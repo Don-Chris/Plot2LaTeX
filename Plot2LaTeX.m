@@ -4,11 +4,15 @@ function Plot2LaTeX( h_in, filename, varargin )
 %inclusion into LaTeX. Requires free and open-source vector graphics 
 %editor Inkscape.
 %
-%   options: 'Renderer':        e.g. 'opengl', 'painters'
+%   options: 'Renderer':        '' (default, e.g. 'opengl', 'painters')
 %            'yCorrFactor':     0.8 (default, in px)
 %            'DIR_INKSCAPE':    directory to inkscape.exe
 %            'doWaitbar':       true (default)
+%            'useOrigFigure'    false (default, Use the original figure
+%                                   or create a copy?)
 %            'doExportPDF':     true (default)
+%            'LabelCorr':       1 (default, in points, Legend box size can
+%                                   be modified.)
 %
 %   PLOT2LATEX(h,filename) saves figure with handle h to a file specified by
 %   filename, without extention. Filename can contain a relative location
@@ -68,7 +72,7 @@ function Plot2LaTeX( h_in, filename, varargin )
 %   - Legend size is not always correct, use \hspace or \vspace in matlab 
 %   legend to achieve a nicer fit. Requires some iterations.
 %   - Rotating 3D images using toolbar does not work, using view([]) works.
-%   - Text boxes wiht LaTeX code which is not interpretable by matlab
+%   - Text boxes with LaTeX code which is not interpretable by matlab
 %   results in too long text boxes.
 %   - Very large figures sometimes result in very large waiting times.
 %   - Older versions than matlab 2014b are not supported.
@@ -86,17 +90,17 @@ function Plot2LaTeX( h_in, filename, varargin )
 %   The bash profile location can be found by using '/usr/bin/env bash'
 
 %   To do:
-%   - Restore Interpreter instead of putting it to LaTeX
+%   - remove \"u and others 
 %   - Annotation textbox objects
 %   - Allow multiple line text
 %   - Use findall(h,'-property','String')
-%   - Speed up code by smarter string replacent of SVG file
+%   - Speed up code by smarter string replacement of SVG file
 %   - Resize of legend box using: [h,icons,plots,str] = legend(); (not so simple)
-%   - PLOT2LATEX does not suport colored text. (Matlab limitation in saving to sgv)
+%   - PLOT2LATEX does not suport colored text. (Matlab limitation in saving to svg)
 %   - Size difference .svg and .fig if specifying units other than px.
 %       (Matlab limitation?)
 %
-%   Version:  1.3 / 1.4
+%   Version:  1.3 / 1.4 / 1.5
 %   Autor:    C. Schulte
 %   Date:     10.02.2022
 %   Contact:  C.Schulte@irt.rwth-aachen.de
@@ -125,31 +129,47 @@ function Plot2LaTeX( h_in, filename, varargin )
 %   - string as input allowed
 %   - closes the file, if the programm could not finish
 %   - inkscape path with white spaces allowed
+%   v 1.5 - 18/03/2022
+%   - 2 options (LabelCorr, useOrigFigure) added
+%   - fixed a bug, that only one subplot was copied
+%   - Constant Line objects added
+
+%% --------------------------- Config --------------------------- %%
+%default inkscape location, e.g. 
+% "C:\Program Files\Inkscape\bin\inkscape.exe
+opts.DIR_INKSCAPE = 'inkscape'; %   Specify location of your inkscape installation, with "inkscape": checks if inkscape.exe is already known to shell.
+if ~isempty(getenv('DIR_INKSCAPE')) % check if environment variable already exists
+    opts.DIR_INKSCAPE = getenv('DIR_INKSCAPE');
+end
+
+opts.yCorrFactor = 0.8; % default, in px
+opts.LabelCorr = 1; % default, in points, Legend size correction value
+opts.useOrigFigure = false; % should the original figure be used or copied?
+opts.Renderer = ''; % do not set default renderer
+opts.doWaitbar = true;
+opts.doExportPDF = true;
+% ------------------------- Config end --------------------------- %
+opts = checkOptions(opts,varargin); % update default options based on information in varargin
 
 
 %% Create a figure copy
 if ~strcmp(h_in.Type,'figure')
     error('h object is not a figure')
 end
-h = copy_Figure(h_in);
-
-if isstring(filename)
-    filename = isstring(filename);
-end
-
-%% Config
-if ~isempty(getenv('DIR_INKSCAPE')) % check if environment variable already exists
-    opts.DIR_INKSCAPE = getenv('DIR_INKSCAPE');
+if opts.useOrigFigure
+    h = h_in;
 else
-    opts.DIR_INKSCAPE = 'inkscape'; %   Specify location of your inkscape installation, with "inkscape": checks if inkscape.exe is already known to shell.
+    h = copy_Figure(h_in);
 end
-opts.yCorrFactor = 0.8; % default, in px
-opts.Renderer = ''; % do not set default renderer
-opts.doWaitbar = true;
-opts.doExportPDF = true;
 
-opts = checkOptions(opts,varargin); % update default options based on information in varargin
 
+%% Check Filename
+if isstring(filename)
+    filename = char(filename);
+end
+
+
+%% Check Renderer
 if ~isempty(opts.Renderer) %WARNING: large size figures can become very large
     h.Renderer = opts.Renderer; % set render
 end
@@ -193,12 +213,7 @@ PosAnchSVG      = {'start','middle','end'};
 PosAligmentSVG  = {'start','center','end'};
 PosAligmentMAT  = {'left','center','right'};
 
-n_Axe = length(LegObj);
-for i = 1:n_Axe % scale text omit in next version
-    LegPos(i,:) = LegObj(i).Position;
-end
-
-ChangeInterpreter(h,'Latex')
+ChangeInterpreter(h,'tex')
 h.PaperPositionMode = 'auto'; % Keep current size
 
 
@@ -228,22 +243,20 @@ for i = 1:n_TexObj % do for text, titles and axes labels
                                     PosAligmentMAT,...
                                     TexObj(i).HorizontalAlignment)));
     % generate label
-    Labels(iLabel).LabelText = LabelText(iLabel);
+    Labels = LabelText(iLabel,Labels);
     
     %find text posiont
     Labels(iLabel).Position = TexObj(i).Position;
     
     % replace string with label
-    TexObj(i).String = LabelText(iLabel);
+    TexObj(i).String = Labels(iLabel).LabelText;
 end
 
 % do similar for legend objects
 n_LegObj = length(LegObj);
-iLegEntry = 0;
 for i = 1:n_LegObj 
     n_Str = length(LegObj(i).String);
     
-    iLegEntry = iLegEntry + 1;
     iLabel = iLabel + 1;
     
     Labels(iLabel).TrueText = LegObj(i).String{1};
@@ -251,21 +264,16 @@ for i = 1:n_LegObj
     Labels(iLabel).Anchor = PosAnchSVG(1);
     
     % generate legend label padded with dots to fill text box
-    LegObj(i).String{1} = LegText(iLegEntry);
-    while LegPos(i,3) >= LegObj(i).Position(3) % first label of legend should match box size
-        LegObj(i).String{1} = [LegObj(i).String{1},'.'];
-    end
-    LegObj(i).String{1} = LegObj(i).String{1}(1:end-1);
-    Labels(iLabel).LabelText = LegObj(i).String{1}; % write as label
+    Labels = LabelText(iLabel,Labels);
+    LegObj(i).String{1} = Labels(iLabel).LabelText;
     
     for j = 2:n_Str % do short as possible label for other entries
-       iLegEntry = iLegEntry + 1;
        iLabel = iLabel + 1;
        Labels(iLabel).TrueText = LegObj(i).String{j};
        Labels(iLabel).Alignment = PosAligmentSVG(1);
        Labels(iLabel).Anchor = PosAnchSVG(1);
-       Labels(iLabel).LabelText = LegText(iLegEntry);
-       LegObj(i).String{j} = LegText(iLegEntry);
+       Labels = LabelText(iLabel,Labels);
+       LegObj(i).String{j} = Labels(iLabel).LabelText;
     end
 end
 
@@ -278,8 +286,8 @@ for i = 1:n_AxeObj
         Labels(iLabel).TrueText = AxeObj(i).XTickLabel{j};
         Labels(iLabel).Alignment = PosAligmentSVG(2);
         Labels(iLabel).Anchor = PosAnchSVG(2);
-        Labels(iLabel).LabelText = LabelText(iLabel);
-        AxeObj(i).XTickLabel{j} = LabelText(iLabel);
+        Labels = LabelText(iLabel,Labels);
+        AxeObj(i).XTickLabel{j} = Labels(iLabel).LabelText;
     end
     
     isRightAx = strcmp(AxeObj(i).YAxisLocation,'right'); % exeption for yy-plot
@@ -294,8 +302,8 @@ for i = 1:n_AxeObj
             Labels(iLabel).Alignment = PosAligmentSVG(3);
             Labels(iLabel).Anchor = PosAnchSVG(3);
         end
-        Labels(iLabel).LabelText = LabelText(iLabel);
-        AxeObj(i).YTickLabel{j} = LabelText(iLabel);
+        Labels = LabelText(iLabel,Labels);
+        AxeObj(i).YTickLabel{j} = Labels(iLabel).LabelText;
     end
     
     n_Str = length(AxeObj(i).ZTickLabel);
@@ -304,8 +312,8 @@ for i = 1:n_AxeObj
         Labels(iLabel).TrueText = AxeObj(i).ZTickLabel{j};
         Labels(iLabel).Alignment = PosAligmentSVG(3);
         Labels(iLabel).Anchor = PosAnchSVG(3);
-        Labels(iLabel).LabelText = LabelText(iLabel);
-        AxeObj(i).ZTickLabel{j} = LabelText(iLabel);
+        Labels = LabelText(iLabel,Labels);
+        AxeObj(i).ZTickLabel{j} = Labels(iLabel).LabelText;
     end
 end
 
@@ -327,12 +335,43 @@ for i = 1:n_ColObj
             Labels(iLabel).Alignment = PosAligmentSVG(3);
             Labels(iLabel).Anchor = PosAnchSVG(3);
         end
-        Labels(iLabel).LabelText = LabelText(iLabel);
-        ColObj(i).TickLabels{j} = LabelText(iLabel);
+        Labels = LabelText(iLabel,Labels);
+        ColObj(i).TickLabels{j} = Labels(iLabel).LabelText;
+    end
+end
+
+
+
+% Constant line objects
+ConstLineObj = findall(h,'Type','ConstantLine');
+n_ConstLineObj = length(ConstLineObj);
+for i = 1:n_ConstLineObj % do for text, titles and axes labels
+    if isempty(ConstLineObj(i).Label)
+    iLabel = iLabel + 1;
+    
+    % find text string
+    Labels(iLabel).TrueText = ConstLineObj(i).Label; %#ok<*AGROW>
+    
+    % find text aligment
+    Labels(iLabel).Alignment = PosAligmentSVG(2);
+	% find achor aligment svg uses this
+    if isequal(ConstLineObj(i).InterceptAxis,'y')
+        p_temp = {'top','middle','bottom'};
+    else
+        p_temp = {'bottom','middle','top'};
+    end
+    Labels(iLabel).Anchor = PosAnchSVG(find(ismember(p_temp,ConstLineObj(i).LabelVerticalAlignment)));
+    % generate label
+    Labels = LabelText(iLabel,Labels);
+    
+    %find text posiont
+    Labels(iLabel).Position = [];
+    
+    % replace string with label
+    ConstLineObj(i).Label = Labels(iLabel).LabelText;
     end
 end
 nLabel = iLabel;
-
 % set text interpreter to plain text
 ChangeInterpreter(h,'none');  
 
@@ -372,7 +411,7 @@ try
         iLine = iLine + 1;
         StrLine_old = fgetl(fin);
 
-        FoundLabelText = regexp(StrLine_old,'>\S*</text','match'); %try to find label
+        FoundLabelText = regexp(StrLine_old,'>.+</text','match'); %try to find label
         StrLine_new = StrLine_old;
         if ~isempty(FoundLabelText)
             nFoundLabel = nFoundLabel + 1;
@@ -446,15 +485,18 @@ close(h)
 end
 
 %% ------------------------------------------------------------------------
-function Str = LabelText(iLabel)
+function Labels = LabelText(index, Labels)
 % LABELTEXT generates labels based on label number
-    % Original
-    %Str = 'X000';
-    % We:
-    Str = 'X00';
-    idStr = num2str(iLabel);
-    nStr = length(idStr);
-    Str(end - nStr + 1 : end ) = idStr;
+text = Labels(index).TrueText;
+if isfield(Labels,'LabelText')
+    LabelList = {Labels(1:index-1).LabelText};
+    
+    
+    while ismember(text,LabelList)
+        text = [text,'.'];
+    end
+end
+Labels(index).LabelText = text;
 end
 
 %% ------------------------------------------------------------------------
@@ -496,38 +538,21 @@ function strXML = EscapeXML(str)
 end
 
 %% ------------------------------------------------------------------------
-function [fig,ax] = copy_Figure(fig_orig)
-% RESIZE_FIGURE updates the figure size of the new copied figure
+function [fig] = copy_Figure(fig_orig)
+% this program copies a figure to another figure
+% 
 
 Name = 'Plot2LaTeX';
+figurefile = fullfile(pwd,[Name,'.fig']);
+savefig(fig_orig,figurefile)
 
-% Check if Figure is still open
-figures = get(groot,'Children');
-closed = true;
-for pathIdx = 1:length(figures)
-    if strcmp(Name,figures(pathIdx).Name)
-        closed = false;
-        fig = figures(pathIdx);
-        clf(fig)
-        break;
-    end
-end
-
-% Open the new figure if not existing
-if closed
-    fig = figure('Name',Name);
-end
-
-% Copy the data
-ax_orig = gca(fig_orig);
-warning('off')
-ax = copyobj(ax_orig,fig); 
-
-% Update the fig size
+fig = openfig(figurefile);
+fig.Name = Name;
 set(fig,'Units',get(fig_orig,'Units'));
 set(fig,'position',get(fig_orig,'position'));
 drawnow()
 warning('on')
+delete(figurefile)
 end
 
 %% ------------------------------------------------------------------------
@@ -555,8 +580,9 @@ validEntries = fieldnames(options);
 for ii = 1:2:length(inputArgs)
     entry = inputArgs{ii};
     
-    if ischar(entry) && isValidEntry(validEntries,entry,fcnName,doWarning)
-        options.(entry) = inputArgs{ii+1};
+    [isValid,validEntry] = isValidEntry(validEntries,entry,fcnName,doWarning);
+    if ischar(entry) && isValid
+        options.(validEntry) = inputArgs{ii+1};
         
     elseif isstruct(entry)
         fieldNames = fieldnames(entry);
@@ -573,9 +599,10 @@ for ii = 1:2:length(inputArgs)
 end
 end
 
-function bool = isValidEntry(validEntries, input, fcnName,doWarning)
+function [bool,idx] = isValidEntry(validEntries, input, fcnName,doWarning)
 % allow input of an options structure that overwrites existing fieldnames with its own, for increased flexibility
 bool = false;
+idx = -1;
 valIdx = strcmpi(input,validEntries);
 if nnz(valIdx) == 0
     valIdx = contains(validEntries,input,'IgnoreCase',true);
@@ -588,6 +615,7 @@ if nnz(valIdx) > 1
         error(['-',fcnName,'.m: Option "', input,'" not correct. Allowed options are [', longString, '].'])
     end
 elseif nnz(valIdx) > 0 % All else options
+    idx = validEntries{valIdx};
     bool = true;
 else
     strings = [validEntries(1); strcat(',', validEntries(2:end)) ] ; % removes ' ' at the end when concatenating

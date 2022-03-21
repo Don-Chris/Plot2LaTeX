@@ -11,8 +11,8 @@ function Plot2LaTeX( h_in, filename, varargin )
 %            'useOrigFigure'    false (default, Use the original figure
 %                                   or create a copy?)
 %            'doExportPDF':     true (default)
-%            'LabelCorr':       1 (default, in points, Legend box size can
-%                                   be modified.)
+%            'Interpreter':     'tex' (default, 'latex','None'), changes the
+%                                   matlab text interpreter
 %
 %   PLOT2LATEX(h,filename) saves figure with handle h to a file specified by
 %   filename, without extention. Filename can contain a relative location
@@ -45,16 +45,16 @@ function Plot2LaTeX( h_in, filename, varargin )
 %   included into the .tex file using the using the built-in "save to pdf" 
 %   functionality of Inkscape.
 %
-%   PLOT2LATEX saves the figure to a svg and pdf file with the
+%   PLOT2LATEX saves the figure to a svg and pdf file with
 %   approximately the same width and height. Specify the Font size and size
 %   within Matlab for correct conversion.
 %
 %   Workflow
-%   - Matlab renames all strings of the figure to labels. The strings are
-%   stored to be used later. To prevent a change in texbox size, labels are
-%   padded to match the size of the texbox.
-%   - Matlab saves the figure with labels to a svg file.
-%   - Matlab opens the svg file and restores the labels  wiht the original
+%   - Matlab renames duplicate strings of the figure. The strings are
+%   stored to be used later. To prevent a change in texbox size, duplicate labels
+%   get "." at the end of the label.
+%   - Matlab saves the figure with modified labels to a svg file.
+%   - Matlab opens the svg file and restores the labels with the original
 %   string
 %   - Matlab invokes Inkscape to save the svg file to a pdf + pdf_tex file.
 %   - The pdf_tex is to be included into LaTeX.
@@ -129,32 +129,34 @@ function Plot2LaTeX( h_in, filename, varargin )
 %   - string as input allowed
 %   - closes the file, if the programm could not finish
 %   - inkscape path with white spaces allowed
-%   v 1.5 - 18/03/2022
-%   - 2 options (LabelCorr, useOrigFigure) added
+%   v 1.5 - 21/03/2022
+%   - 2 options (Interpreter, useOrigFigure) added
 %   - fixed a bug, that only one subplot was copied
 %   - Constant Line objects added
 
 %% --------------------------- Config --------------------------- %%
-%default inkscape location, e.g. 
+% default inkscape location, e.g. 
 % "C:\Program Files\Inkscape\bin\inkscape.exe
-opts.DIR_INKSCAPE = 'inkscape'; %   Specify location of your inkscape installation, with "inkscape": checks if inkscape.exe is already known to shell.
+% Specify location of your inkscape installation, 
+% if opts.DIR_INKSCAPE = "inkscape": checks if inkscape.exe is already known to shell.
+opts.DIR_INKSCAPE = 'inkscape'; 
 if ~isempty(getenv('DIR_INKSCAPE')) % check if environment variable already exists
     opts.DIR_INKSCAPE = getenv('DIR_INKSCAPE');
 end
 
 opts.yCorrFactor = 0.8; % default, in px
-opts.LabelCorr = 1; % default, in points, Legend size correction value
 opts.useOrigFigure = false; % should the original figure be used or copied?
 opts.Renderer = ''; % do not set default renderer
 opts.doWaitbar = true;
 opts.doExportPDF = true;
+opts.Interpreter = 'tex'; % matlab text interpreters, others: 'tex','None'
 % ------------------------- Config end --------------------------- %
 opts = checkOptions(opts,varargin); % update default options based on information in varargin
 
 
 %% Create a figure copy
 if ~strcmp(h_in.Type,'figure')
-    error('h object is not a figure')
+    error(' - Plot2LaTeX: h_in object is not a figure')
 end
 if opts.useOrigFigure
     h = h_in;
@@ -190,7 +192,8 @@ if ~inkscape_valid
     if check_Inkscape_Dir(opts.DIR_INKSCAPE)
         setenv('DIR_INKSCAPE',opts.DIR_INKSCAPE);
     else
-        error([' - Plot2LaTeX: Inkscape Installation not found.  Matlab command "system(''"',opts.DIR_INKSCAPE,'" --version'')" was not successful.'])
+    	opts.doExportPDF = false;
+        warning([' - Plot2LaTeX: Inkscape Installation not found.  Matlab command "system(''"',opts.DIR_INKSCAPE,'" --version'')" was not successful.'])
     end
 else 
     setenv('DIR_INKSCAPE',opts.DIR_INKSCAPE);
@@ -213,7 +216,7 @@ PosAnchSVG      = {'start','middle','end'};
 PosAligmentSVG  = {'start','center','end'};
 PosAligmentMAT  = {'left','center','right'};
 
-ChangeInterpreter(h,'tex')
+ChangeInterpreter(h,opts.Interpreter)
 h.PaperPositionMode = 'auto'; % Keep current size
 
 
@@ -267,11 +270,12 @@ for i = 1:n_LegObj
     Labels = LabelText(iLabel,Labels);
     LegObj(i).String{1} = Labels(iLabel).LabelText;
     
-    for j = 2:n_Str % do short as possible label for other entries
+    for j = 2:n_Str
        iLabel = iLabel + 1;
        Labels(iLabel).TrueText = LegObj(i).String{j};
        Labels(iLabel).Alignment = PosAligmentSVG(1);
        Labels(iLabel).Anchor = PosAnchSVG(1);
+       
        Labels = LabelText(iLabel,Labels);
        LegObj(i).String{j} = Labels(iLabel).LabelText;
     end
@@ -340,35 +344,33 @@ for i = 1:n_ColObj
     end
 end
 
-
-
 % Constant line objects
 ConstLineObj = findall(h,'Type','ConstantLine');
 n_ConstLineObj = length(ConstLineObj);
 for i = 1:n_ConstLineObj % do for text, titles and axes labels
     if isempty(ConstLineObj(i).Label)
-    iLabel = iLabel + 1;
-    
-    % find text string
-    Labels(iLabel).TrueText = ConstLineObj(i).Label; %#ok<*AGROW>
-    
-    % find text aligment
-    Labels(iLabel).Alignment = PosAligmentSVG(2);
-	% find achor aligment svg uses this
-    if isequal(ConstLineObj(i).InterceptAxis,'y')
-        p_temp = {'top','middle','bottom'};
-    else
-        p_temp = {'bottom','middle','top'};
-    end
-    Labels(iLabel).Anchor = PosAnchSVG(find(ismember(p_temp,ConstLineObj(i).LabelVerticalAlignment)));
-    % generate label
-    Labels = LabelText(iLabel,Labels);
-    
-    %find text posiont
-    Labels(iLabel).Position = [];
-    
-    % replace string with label
-    ConstLineObj(i).Label = Labels(iLabel).LabelText;
+        iLabel = iLabel + 1;
+
+        % find text string
+        Labels(iLabel).TrueText = ConstLineObj(i).Label; %#ok<*AGROW>
+
+        % find text aligment
+        Labels(iLabel).Alignment = PosAligmentSVG(2);
+        % find achor aligment svg uses this
+        if isequal(ConstLineObj(i).InterceptAxis,'y')
+            p_temp = {'top','middle','bottom'};
+        else
+            p_temp = {'bottom','middle','top'};
+        end
+        Labels(iLabel).Anchor = PosAnchSVG(find(ismember(p_temp,ConstLineObj(i).LabelVerticalAlignment)));
+        % generate label
+        Labels = LabelText(iLabel,Labels);
+
+        %find text posiont
+        Labels(iLabel).Position = [];
+
+        % replace string with label
+        ConstLineObj(i).Label = Labels(iLabel).LabelText;
     end
 end
 nLabel = iLabel;
@@ -481,7 +483,9 @@ end
 if opts.doWaitbar
     close(hWaitBar);
 end
-close(h)
+if ~opts.useOrigFigure
+    close(h)
+end
 end
 
 %% ------------------------------------------------------------------------
@@ -497,12 +501,6 @@ if isfield(Labels,'LabelText')
     end
 end
 Labels(index).LabelText = text;
-end
-
-%% ------------------------------------------------------------------------
-function Str = LegText(iLedEntry)
-% LEGTEXT generates legend labels based on legend entry number
-    Str = num2str(iLedEntry);
 end
 
 %% ------------------------------------------------------------------------
@@ -539,8 +537,7 @@ end
 
 %% ------------------------------------------------------------------------
 function [fig] = copy_Figure(fig_orig)
-% this program copies a figure to another figure
-% 
+% this program copies a figure 
 
 Name = 'Plot2LaTeX';
 figurefile = fullfile(pwd,[Name,'.fig']);
@@ -599,6 +596,7 @@ for ii = 1:2:length(inputArgs)
 end
 end
 
+%% ------------------------------------------------------------------------
 function [bool,idx] = isValidEntry(validEntries, input, fcnName,doWarning)
 % allow input of an options structure that overwrites existing fieldnames with its own, for increased flexibility
 bool = false;

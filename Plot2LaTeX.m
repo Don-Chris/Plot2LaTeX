@@ -13,6 +13,8 @@ function Plot2LaTeX( h_in, filename, varargin )
 %            'doExportPDF':     true (default)
 %            'Interpreter':     'tex' (default, 'latex','none'), changes the
 %                                   matlab text interpreter
+%            'FontSize':        11 (default, use '' if the fontSize should
+%                                   not be changed)
 %
 %   PLOT2LATEX(h,filename) saves figure with handle h to a file specified by
 %   filename, without extention. Filename can contain a a full path or a name 
@@ -94,7 +96,6 @@ function Plot2LaTeX( h_in, filename, varargin )
 %   - Allow multiple line text
 %   - Use findall(h,'-property','String')
 %   - Speed up code by smarter string replacement of SVG file
-%   - Resize of legend box using: [h,icons,plots,str] = legend(); (not so simple)
 %   - Size difference .svg and .fig if specifying units other than px.
 %       (Matlab limitation?)
 %
@@ -136,8 +137,12 @@ function Plot2LaTeX( h_in, filename, varargin )
 %   v 1.6 - 21/03/2022
 %   - exponential exponents on axis added
 %   - not supported text-elements don't stop svg-export
+%   v 1.7 - 13/09/2022
+%   - fixed a bug in colorbar
+%   - legend size is fixed based on initial position
+%   - added an option for fontSize
 
-%% --------------------------- Config --------------------------- %%
+%% ---------------- Config ------------------------------------------------
 % default inkscape location, e.g. 
 % "C:\Program Files\Inkscape\bin\inkscape.exe
 % Specify location of your inkscape installation, 
@@ -151,14 +156,15 @@ opts.yCorrFactor = 0.8; % default, in px
 opts.useOrigFigure = false; % should the original figure be used or copied?
 opts.Renderer = 'painters'; % use the "painters" renderer, so that the text 
 %                             elements can be found inside the svg
+opts.FontSize = 11;   % Font Size of all Text, use '' if the size should not be changed
 opts.doWaitbar = true;
 opts.doExportPDF = true;
-opts.Interpreter = 'tex'; % matlab text interpreters, others: 'tex','none'
+opts.Interpreter = ''; % matlab text interpreters, others: 'tex','none', '' -> dont change
 % ------------------------- Config end --------------------------- %
 opts = checkOptions(opts,varargin); % update default options based on information in varargin
 
 
-%% Create a figure copy
+%% ---------------- Create a figure copy ----------------------------------
 if ~strcmp(h_in.Type,'figure')
     error(' - Plot2LaTeX: h_in object is not a figure.')
 end
@@ -169,26 +175,33 @@ else
 end
 
 
-%% Check Filename
+%% ---------------- Check Font Size ---------------------------------------
+if ~isempty(opts.FontSize)
+    set(findall(h,'-property','FontSize'),'FontSize',opts.FontSize)
+    drawnow
+end
+
+
+%% ---------------- Check Filename ----------------------------------------
 if isstring(filename)
     filename = char(filename);
 end
 
 
-%% Check Renderer
+%% ---------------- Check Renderer ----------------------------------------
 if ~isempty(opts.Renderer) %WARNING: large size figures can become very large
     h.Renderer = opts.Renderer; % set render
 end
 
 
-%% init waitbar
+%% ---------------- init waitbar ------------------------------------------
 if opts.doWaitbar
     nStep = 4; Step = 0; 
     hWaitBar = waitbar(Step/nStep,'Initializing');
 end
 
 
-%% test if inkscape installation is correct
+%% ---------------- test if inkscape installation is correct --------------
 inkscape_valid = check_Inkscape_Dir(opts.DIR_INKSCAPE);
 if ~inkscape_valid
     [file,pathname] = uigetfile('inkscape.exe',[opts.DIR_INKSCAPE, ' cannot be found, please select "inkscape.exe".']');
@@ -204,13 +217,13 @@ else
 end
 
 
-%% Check matlab version
+%% ---------------- Check matlab version ----------------------------------
 if verLessThan('matlab', '8.4.0.')
 	error('Older versions than Matlab 2014b are not supported')
 end
 
 
-%% Find all objects with text
+%% ---------------- Find all objects with text ----------------------------
 TexObj = findall(h,'Type','Text'); % normal text, titels, x y z labels
 LegObj = findall(h,'Type','Legend'); % legend objects
 AxeObj = findall(h,'Type','Axes');  % axes containing x y z ticklabel
@@ -221,11 +234,21 @@ PosAnchSVG      = {'start','middle','end'};
 PosAligmentSVG  = {'start','center','end'};
 PosAligmentMAT  = {'left','center','right'};
 
-ChangeInterpreter(h,opts.Interpreter)
+ChangeInterpreter(h,opts.Interpreter) % Change Interpreter if specified
 h.PaperPositionMode = 'auto'; % Keep current size
+getShortName(true); % reset the persistent variable
 
 
-%% Replace text with a label
+%% ---------------- Check Legend Position ---------------------------------
+n_LegObj = length(LegObj);
+legend_Position = cell(n_LegObj,1);
+for i = 1:n_LegObj
+    drawnow
+    legend_Position{i} = LegObj(i).Position;
+end
+
+
+%% ---------------- Replace text with a label -----------------------------
 if opts.doWaitbar
     Step = Step + 1;
     waitbar(Step/nStep,hWaitBar,'Replacing text with labels');
@@ -259,54 +282,63 @@ for i = 1:n_TexObj % do for text, titles and axes labels
     end
 end
 
-% do similar for legend objects
+
+%% ---------------- legend objects ----------------------------------------
 n_LegObj = length(LegObj);
 for i = 1:n_LegObj 
     n_Str = length(LegObj(i).String);
-    
-    iLabel = iLabel + 1;
-    
-    Labels(iLabel).TrueText = LegObj(i).String{1};
-    Labels(iLabel).Alignment = PosAligmentSVG{1}; % legends are always left aligned
-    Labels(iLabel).Anchor = PosAnchSVG{1};
-    
-    % generate legend label padded with dots to fill text box
-    [Labels,changed] = LabelText(iLabel,Labels);
-    if changed
-        LegObj(i).String{1} = Labels(iLabel).LabelText;
-    end
-    
-    for j = 2:n_Str
+    for j = 1:n_Str
         iLabel = iLabel + 1;
+
         Labels(iLabel).TrueText = LegObj(i).String{j};
-        Labels(iLabel).Alignment = PosAligmentSVG{1};
+        Labels(iLabel).Alignment = PosAligmentSVG{1}; % legends are always left aligned
         Labels(iLabel).Anchor = PosAnchSVG{1};
-       
-        [Labels,changed] = LabelText(iLabel,Labels);
+
+        % generate legend label as a short string ('a' -> 'z')
+        [Labels,changed] = LabelText(iLabel,Labels,true);
         if changed
             LegObj(i).String{j} = Labels(iLabel).LabelText;
         end
     end
+    
+    % Check if the substitute label are long enough
+    while LegObj(i).Position(3) < legend_Position{i}(3)*0.97
+        Labels(iLabel).LabelText = [Labels(iLabel).LabelText,'.'];
+        LegObj(i).String{j} = Labels(iLabel).LabelText;
+    end
+    LegObj(i).Position = legend_Position{i};
 end
 
-% do similar for color bar objects
+
+%% ---------------- color bar objects -------------------------------------
 n_ColObj = length(ColObj); 
 for i = 1:n_ColObj
     isAxIn = strcmp(ColObj(i).AxisLocation,'in'); % find internal external text location
-    isAxEast = strcmp(ColObj(i).Location,'east'); % find location
-    isRightAx = isAxIn ~= isAxEast;
+    location = ColObj(i).Location;
+    if contains(location,'east') && isAxIn % text is right aligned
+        Alignment = PosAligmentSVG{3};
+        Anchor = PosAnchSVG{3};
+    elseif contains(location,'east') % text is left aligned
+        Alignment = PosAligmentSVG{1};
+        Anchor = PosAnchSVG{1};
+    elseif contains(location,'west') && isAxIn % text is left aligned
+        Alignment = PosAligmentSVG{1};
+        Anchor = PosAnchSVG{1};
+    elseif contains(location,'west') % text is right aligned
+        Alignment = PosAligmentSVG{3}; 
+        Anchor = PosAnchSVG{3};
+    else % text is centered
+        Alignment = PosAligmentSVG{2};
+        Anchor = PosAnchSVG{2};
+    end
     
     n_Str = length(ColObj(i).TickLabels);
     for j = 1:n_Str
         iLabel = iLabel + 1;
         Labels(iLabel).TrueText = ColObj(i).TickLabels{j};
-        if isRightAx % if text is right aligned
-            Labels(iLabel).Alignment = PosAligmentSVG{1};
-            Labels(iLabel).Anchor = PosAnchSVG{1};
-        else % if text is left aligned
-            Labels(iLabel).Alignment = PosAligmentSVG{3};
-            Labels(iLabel).Anchor = PosAnchSVG{3};
-        end
+        Labels(iLabel).Alignment = Alignment;
+        Labels(iLabel).Anchor = Anchor;
+
         [Labels,changed] = LabelText(iLabel,Labels);
         if changed
             ColObj(i).TickLabels{j} = Labels(iLabel).LabelText;
@@ -314,7 +346,8 @@ for i = 1:n_ColObj
     end
 end
 
-% Constant line objects
+
+%%  ---------------- Constant line objects --------------------------------
 n_ConstLineObj = length(ConstLineObj);
 for i = 1:n_ConstLineObj % do for text, titles and axes labels
     if ~isempty(ConstLineObj(i).Label)
@@ -343,7 +376,8 @@ for i = 1:n_ConstLineObj % do for text, titles and axes labels
     end
 end
 
-% do similar for axes objects, XTick, YTick, ZTick
+
+%% ---------------- do similar for axes objects, XTick, YTick, ZTick ------
 n_AxeObj = length(AxeObj);
 for i = 1:n_AxeObj 
     
@@ -369,11 +403,13 @@ for i = 1:n_AxeObj
     [Labels, iLabel] = checkAxis(AxeObj(i).XAxis, Labels, iLabel, alignment, anchor);
 end
 
-% set text interpreter to plain text
+
+%% ---------------- set text interpreter to plain text --------------------
 ChangeInterpreter(h,'none');  
+drawnow
 
 
-%% Support for exponential expression
+%% ---------------- Support for exponential expression --------------------
 % original figure: x10^exponent, in exported svg-file: #10^exponent
 % replace # with x:
 iLabel = iLabel +1;
@@ -383,7 +419,7 @@ Labels(iLabel).Alignment = PosAligmentSVG{1};
 Labels(iLabel).Anchor = PosAnchSVG{1};
 
 
-%% Save to fig and SVG
+%% ---------------- Save to fig and SVG -----------------------------------
 if opts.doWaitbar
     Step = Step + 1;
     waitbar(Step/nStep,hWaitBar,'Saving figure to .svg file');
@@ -396,7 +432,7 @@ end
 saveas(h,filename,'svg'); % export to svg
 
 
-%% Modify SVG file to replace labels with original text
+%% ---------------- Modify SVG file to replace labels with original text --
 if opts.doWaitbar
     Step = Step + 1;
     waitbar(Step/nStep,hWaitBar,'Restoring text in .svg file');
@@ -471,15 +507,16 @@ try
     fclose(fout);
     movefile([filename,'_temp.svg'],[filename,'.svg'])
     if nFoundLabel == 0
-        warning(' - Plot2LaTeX: No text elements found and updated.')
+        warning(' - Plot2LaTeX: No text elements found and updated. Please check if no text is used or if the Renderer is "painters".')
     end
 catch
-    warning(' - Plot2LaTeX: Could not update the svg.')
+    warning(' - Plot2LaTeX: Could not update the svg. No permission?')
     fclose('all');
     delete([filename,'_temp.svg']);
 end
 
-%% Invoke Inkscape to generate PDF + PDF_TeX
+
+%% ---------------- Invoke Inkscape to generate PDF + PDF_TeX -------------
 if opts.doExportPDF
     if opts.doWaitbar
         Step = Step + 1;
@@ -501,7 +538,7 @@ if opts.doExportPDF
 end
 
 
-%% Clean up
+%% ---------------- Clean up ----------------------------------------------
 if opts.doWaitbar
     close(hWaitBar);
 end
@@ -549,26 +586,42 @@ else
 end
 end
 
+
 %% ------------------------------------------------------------------------
-function [Labels, changed] = LabelText(index, Labels)
+function [Labels, changed] = LabelText(index, Labels, doShorten)
 % LABELTEXT generates labels based on label number
-text = Labels(index).TrueText;
+if nargin == 2 % Check Input
+    doShorten = false;
+end
+
+if doShorten % Get Initial Text
+    text = getShortName();
+else
+    text = Labels(index).TrueText;
+end
+
 if isfield(Labels,'LabelText')
     LabelList = {Labels(1:index-1).LabelText};
     
     text = change_chars(text);
-    while ismember(text,LabelList)
-        text = [text,'.'];
+    while ismember(text,LabelList) % Check if Label already exists
+        if doShorten
+            text = getShortName();
+        else
+            text = [text,'.'];
+        end
     end
 end
 changed = ~strcmp(text,Labels(index).TrueText);
 Labels(index).LabelText = text;
 end
 
+
 %% ------------------------------------------------------------------------
 function ChangeInterpreter(h,Interpreter)
 % CHANGEINTERPRETER puts interpeters in figure h to Interpreter
 
+if ~isempty(Interpreter)
     TexObj = findall(h,'Type','Text');
     LegObj = findall(h,'Type','Legend');
     AxeObj = findall(h,'Type','Axes');  
@@ -589,6 +642,8 @@ function ChangeInterpreter(h,Interpreter)
         Obj(i).TickLabelInterpreter = Interpreter;
     end
 end
+end
+
 
 %% ------------------------------------------------------------------------
 function strXML = EscapeXML(str)
@@ -598,6 +653,7 @@ function strXML = EscapeXML(str)
     strXML = regexprep(str,escChar,repChar);
 end
 
+
 %% ------------------------------------------------------------------------
 function str = change_chars(str)
 % \"U -> U, etc.
@@ -605,6 +661,7 @@ function str = change_chars(str)
     repChar = {'a','o','u','A','O','U'};
     str = regexprep(str,escChar,repChar);
 end
+
 
 %% ------------------------------------------------------------------------
 function [fig] = copy_Figure(fig_orig)
@@ -622,6 +679,7 @@ drawnow()
 warning('on')
 delete(figurefile)
 end
+
 
 %% ------------------------------------------------------------------------
 function options = checkOptions(options, inputArgs, doWarning)
@@ -667,34 +725,38 @@ for ii = 1:2:length(inputArgs)
 end
 end
 
+
 %% ------------------------------------------------------------------------
-function [bool,idx] = isValidEntry(validEntries, input, fcnName,doWarning)
+function [bool,validEntry] = isValidEntry(validEntries, input, fcnName, doWarning)
 % allow input of an options structure that overwrites existing fieldnames with its own, for increased flexibility
 bool = false;
-idx = -1;
-valIdx = strcmpi(input,validEntries);
-if nnz(valIdx) == 0
-    valIdx = contains(validEntries,input,'IgnoreCase',true);
+validEntry = '';
+valIdx = strcmp(input,validEntries); % Check case sensitive
+
+if nnz(valIdx) == 0 && ~isstruct(input) && ischar(input)
+    valIdx = strcmpi(input,validEntries); % Check case insensitive
 end
-if nnz(valIdx) > 1
+
+if nnz(valIdx) == 0 && ~isstruct(input) && ischar(input)
+    valIdx = contains(validEntries,input,'IgnoreCase',true); % Check case insensitive
+end
+
+if nnz(valIdx) > 1 && doWarning
     strings = [validEntries(1); strcat(',', validEntries(2:end)) ] ; % removes ' ' at the end when concatenating
     longString = [strings{:}];
     longString = strrep(longString,',',', ');
-    if doWarning
-        error(['-',fcnName,'.m: Option "', input,'" not correct. Allowed options are [', longString, '].'])
-    end
+    error(['-',fcnName,'.m: Option "', input,'" not correct. Allowed options are [', longString, '].'])
 elseif nnz(valIdx) > 0 % All else options
-    idx = validEntries{valIdx};
+    validEntry = validEntries{valIdx};
     bool = true;
-else
+elseif doWarning && ~isstruct(input) && ischar(input)
     strings = [validEntries(1); strcat(',', validEntries(2:end)) ] ; % removes ' ' at the end when concatenating
     longString = [strings{:}];
     longString = strrep(longString,',',', ');
-    if doWarning
-        warning(['-',fcnName,'.m: Option "', input,'" not found. Allowed options are [', longString, '].'])
-    end
+    warning(['-',fcnName,'.m: Option "', input,'" not found. Allowed options are [', longString, '].'])
 end
 end
+
 
 %% ------------------------------------------------------------------------
 function isValid = check_Inkscape_Dir(inkscape_path)
@@ -706,6 +768,7 @@ if status ~= 0 && status ~= 1
     warning([' - check_Inkscape_Dir.m: system(''',inkscape_path,' --help'') was not successful. System response was ',num2str(status),'.'])
 end
 end
+
 
 %% ------------------------------------------------------------------------
 function [isAboveV1, version]= check_Inkscape_Version(inkscape_path)
@@ -723,5 +786,39 @@ else
     version = '';
     isAboveV1 = false;
     warning([' - check_Inkscape_Version.m: system(''',inkscape_path,' --version'') was not successful. System response was ',num2str(status),'.'])
+end
+end
+
+
+%% ------------------------------------------------------------------------
+function text = getShortName(reset)
+
+if nargin == 0
+    reset = false;
+end
+    
+
+persistent cellElement idx
+if isempty(cellElement) || reset
+    cellElement = {0};
+    idx = 1;
+end
+
+if ~reset 
+    celllen = length(cellElement);
+    if cellElement{idx} == 26 && idx == celllen % Add new Char
+        idx = 1;
+        cellElement = num2cell(ones(1,celllen+1));
+    elseif  cellElement{idx} == 26 % increment the char at postion idx
+        idx = idx+1; 
+        cellElement{idx} = cellElement{idx}+1;
+    else
+        cellElement{idx} = cellElement{idx}+1;
+    end
+
+    elements = cell2mat(cellElement)-1;
+    text = char(char('a')+elements);
+else
+    text = [];
 end
 end

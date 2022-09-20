@@ -23,7 +23,7 @@ and Inkscape v1.1.1
 - 'useOrigFigure'    false (default, Use the original figure or create a copy?)
 - 'doExportPDF':     true (default)
 - 'Interpreter':     'tex' (default, 'latex','none'), changes the matlab text interpreter
-- 'FontSize':        11 (default, in pt), should be egual to the font size inside of the document 
+- 'FontSize':        11 (default, in pt), should be equal to the font size inside of the document, use '' if the font size should not be changed before hand.
 
 # Example function calls:
 - **PLOT2LATEX(gcf, 'FirstPlot')**

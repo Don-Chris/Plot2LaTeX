@@ -80,11 +80,11 @@ The y-offset of all text can be modified using yCorrFactor. The default is 'yCor
 Inkscape in Matlab via bash. Therefore change the bash profile in Matlab 
 to something similar as setenv('DYLD_LIBRARY_PATH','/usr/local/bin/').
 The bash profile location can be found by using '/usr/bin/env bash'
-To do:
-- Annotation textbox objects
-- Allow multiple line text
-- Use findall(h,'-property','String')
-- Speed up code by smarter string replacement of SVG file
-- Resize of legend box using: [h,icons,plots,str] = legend(); (not so simple)
-- Size difference .svg and .fig if specifying units other than px.
-(Matlab limitation?)
+
+# To do:
+- [ ] Annotation textbox objects
+- [ ] Allow multiple line text
+- [ ] Use findall(h,'-property','String')
+- [ ] Speed up code by smarter string replacement of SVG file
+- [ ] Resize of legend box using: [h,icons,plots,str] = legend(); (not so simple)
+- [ ] Size difference .svg and .fig if specifying units other than px. (Matlab limitation?)

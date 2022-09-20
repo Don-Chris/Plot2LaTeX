@@ -28,7 +28,7 @@ and Inkscape v1.1.1
 # Example function calls:
 - **PLOT2LATEX(gcf, 'FirstPlot')**
 - **PLOT2LATEX(gcf, 'FirstPlot', 'doWaitbar', false)**
-- **PLOT2LATEX(gcf, 'FirstPlot', 'doExportPDF', false, 'FontSize', 12)**
+- **PLOT2LATEX(gcf, 'FirstPlot', 'doExportPDF', false, 'FontSize', '')**
 
 # Info
 **PLOT2LATEX(h, filename)** saves figure with handle h to a file specified by filename, without extention. Filename can contain a a full path or a name (e.g. 'C:\images\title', 'title') to save the figure to a different location. 

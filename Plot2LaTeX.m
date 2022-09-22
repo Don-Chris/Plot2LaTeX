@@ -1,44 +1,75 @@
 function Plot2LaTeX( h_in, filename, varargin )
 %
-%PLOT2LATEX saves matlab figure as a pdf file in vector format for
-%inclusion into LaTeX. Requires free and open-source vector graphics 
-%editor Inkscape.
+% PLOT2LATEX saves matlab figure as a pdf file in vector format for
+%   inclusion into LaTeX. Requires free and open-source vector graphics 
+%   editor Inkscape. This allows links of varible names to be placed within 
+%   the axis or legend and so on, or variables can be subsequently renamed 
+%   without having to recreate the Matlab plot.
 %
-%   options: 'Renderer':        'painters' (default), 'opengl', ''(no change)
-%            'yCorrFactor':     0.8 (default, in px)
-%            'DIR_INKSCAPE':    directory to inkscape.exe
-%            'doWaitbar':       true (default)
-%            'useOrigFigure'    false (default, Use the original figure
-%                                   or create a copy?)
-%            'doExportPDF':     true (default)
-%            'Interpreter':     'tex' (default, 'latex','none'), changes the
-%                                   matlab text interpreter
-%            'FontSize':        11 (default, use '' if the fontSize should
-%                                   not be changed)
+% options: 
+%   'Renderer':        'painters' (default), 'opengl', ''(no change)
+%                        Should the 'Renderers' Option of the plot be
+%                        changed? 'painters' is important for vector
+%                        graphics
+%   'yCorrFactor':     0.8 (default, in px)
+%                        Option for manually correcting the y position of
+%                        all text elements inside of the svg-file.
+%   'DIR_INKSCAPE':    'inkscape.exe' (default), 'C:/Program Files/
+%                      Inkscape/bin/inkscape.exe'
+%                        directory to the inkscape.exe that is used inside 
+%                        the command window. If the path to inkscape is 
+%   'doWaitbar':       true (default)
+%                        Should a waitbar appear an show the progress?
+%   'useOrigFigure'    false (default)
+%                        Use the original figure or create a copy? Some 
+%                        features of a plot (e.g. background color) copied
+%                        at all or correctly.
+%   'OnlySVG':         false (default)
+%                        Option to stop after creating the svg file. Can
+%                        be used, if the plots are used as svg files or
+%                        if inkscape is not installed.
+%   'Interpreter':     '' (default) , 'latex', 'none', 'tex'
+%                        changes the matlab text interpreter if not left 
+%                        empty
+%   'FontSize':        11 (default), '', 12
+%                        Option to update the fontSize inside of the Figure
+%                        So that the proportions of the svg Plot are 
+%                        correct use '' if the fontSize should not be 
+%                        changed beforehand (could lead to wrong legend 
+%                        sizes, etc.)
+%   'Inkscape_Export_Mode': 'export-area-page' (default), 'export-area', 
+%                           'export-area-drawing', 'export-use-hints'
+%                             inkscape export options, see wiki.inkscape.org
 %
-%   PLOT2LATEX(h,filename) saves figure with handle h to a file specified by
-%   filename, without extention. Filename can contain a a full path or a name 
-%   (e.g. 'C:\images\title', 'title') to save the figure to a different location. 
+% Example function calls:
+%   - PLOT2LATEX(gcf, 'FirstPlot')
+%   - PLOT2LATEX(gcf, 'FirstPlot', 'doWaitbar', false)
+%   - PLOT2LATEX(gcf, 'FirstPlot', 'OnlySVG', false, 'FontSize', '')
+%   - PLOT2LATEX(gcf, 'FirstPlot', options_struct) with
+%     options_struct = struct('OnlySVG, false, ...);
 %
-%   PLOT2LATEX(h,filename, 'option1', value,...) saves figure with specified  
-%   options. The y-offset of all text can be modified using yCorrFactor. 
-%   The default is 'yCorrFactor' = 0.8. The units are px. With 
-%   options.Renderer the renderer of the figure can be specified: 
-%   ('opengl', 'painters').
+% PLOT2LATEX(h,filename) saves figure with handle h to a file specified by
+%   filename, without extention. Filename can contain a a full path or a  
+%   name (e.g. 'C:\images\title', 'title') to save the figure to a  
+%   different location.
 %
-%   PLOT2LATEX requires a installation of Inkscape. The program's 
-%   location can be 'hard coded' into this matlab file if 'inkscape' is not a
-%   valid command for the command window. Please specify your inscape 
+% PLOT2LATEX(h,filename, 'option1', value,...) saves figure with specified  
+%   options. 
+%
+% PLOT2LATEX requires a installation of Inkscape. The program's 
+%   location can be 'hard coded' into this matlab file if 'inkscape' is not
+%   a valid command for the command window. Please specify your inscape 
 %   file location by modifying opts.DIR_INKSCAPE variable on the 
-%   first line of the actual code. 
+%   first line of the actual code or use 
+%   PLOT2LATEX(...,'DIR_INKSCAPE',dir_to_inkscape). 
 %
-%   PLOT2LATEX saves the figures to .svg format. It invokes Inkscape to
+% PLOT2LATEX saves the figures to .svg format. It invokes Inkscape to
 %   save the svg to a .pdf and .pdf_tex file to be incorporated into LaTeX
 %   document using \begin{figure} \input{image.pdf_tex} \end{figure}. 
 %   More information on the svg to pdf conversion can be found here: 
 %   ftp://ftp.fu-berlin.de/tex/CTAN/info/svg-inkscape/InkscapePDFLaTeX.pdf
 %   
-%   PLOT2LATEX produces three files: .svg, .pdf, .pfd_tex. The .svg-file 
+% PLOT2LATEX produces three files: .svg, .pdf, .pfd_tex. The .svg-file 
 %   contains vector image. The .pdf-file contains figure without the text.
 %   The .pdf_tex-file contains the text including locations and other
 %   type setting.
@@ -47,100 +78,106 @@ function Plot2LaTeX( h_in, filename, varargin )
 %   included into the .tex file using the using the built-in "save to pdf" 
 %   functionality of Inkscape.
 %
-%   PLOT2LATEX saves the figure to a svg and pdf file with
+% PLOT2LATEX saves the figure to a svg and pdf file with
 %   approximately the same width and height. Specify the Font size and size
-%   within Matlab for correct conversion.
-%
-%   Workflow
-%   - Matlab renames duplicate strings of the figure. The strings are
+%   within Matlab for correct conversion. For FontSize use 
+%   set(findall(h,'-property','FontSize'),'FontSize',opts.FontSize)
+%   For PlotSize use: set(h,'Units',unit) with unit='cm','pt','px'
+%   set(h,'position',[0,0, width, height]) with width/height in unit
+% 
+% Workflow:
+% - Matlab renames duplicate strings of the figure. The strings are
 %   stored to be used later. To prevent a change in texbox size, duplicate 
 %   labels get "." at the end of the label.
-%   - Matlab saves the figure with modified labels to a svg file.
-%   - Matlab opens the svg file and restores the labels with the original
+% - Matlab saves the figure with modified labels to a svg file.
+% - Matlab opens the svg file and restores the labels with the original
 %   string
-%   - Matlab invokes Inkscape to save the svg file to a pdf + pdf_tex file.
-%   - The pdf_tex is to be included into LaTeX.
+% - Matlab invokes Inkscape to save the svg file to a pdf + pdf_tex file.
+% - The pdf_tex is to be included into LaTeX.
 %
-%   Features:
-%   - Complex figures such as plotyy, logarithmic scales.
-%   - It parses LaTeX code, even if it is not supported by Matlab LaTeX.
-%   - Supports real transparency.
-%   - SVG is a better supported, maintained and editable format than eps
-%   - SVG allows simple manual modification into Inkscape.
+% Features:
+% - Complex figures such as plotyy, logarithmic scales.
+% - It parses LaTeX code, even if it is not supported by Matlab LaTeX.
+% - Supports real transparency.
+% - SVG is a better supported, maintained and editable format than eps
+% - SVG allows simple manual modification into Inkscape.
 %
-%   Limitation:
-%   - Text resize is still done in PLOT2LATEX. The LaTeX fonts in matlab do
+% Limitation:
+% - Text resize is still done in PLOT2LATEX. The LaTeX fonts in matlab do
 %   not correspond completely with the LaTeX font size.
-%   - Legend size is not always correct, use \hspace or \vspace in matlab 
+% - Legend size is not always correct, use \hspace or \vspace in matlab 
 %   legend to achieve a nicer fit. Requires some iterations.
-%   - Rotating 3D images using toolbar does not work, using view([]) works.
-%   - Text boxes with LaTeX code which is not interpretable by matlab
+% - Rotating 3D images using toolbar does not work, using view([]) works.
+% - Text boxes with LaTeX code which is not interpretable by matlab
 %   results in too long text boxes.
-%   - Very large figures sometimes result in very large waiting times.
-%   - Older versions than matlab 2014b are not supported.
-%   - PLOT2LATEX currently does not work with titles consisting of multiple 
+% - Very large figures sometimes result in very large waiting times.
+% - Older versions than matlab 2014b are not supported.
+% - PLOT2LATEX currently does not work with titles consisting of multiple 
 %   lines.
-%   - PLOT2LATEX does not work with annotation textbox objects.
-%   - PLOT2LATEX does not support colored text.
+% - PLOT2LATEX does not work with annotation textbox objects.
+% - PLOT2LATEX does not support colored text.
 %
-%   Trouble shooting
-%   - For Unix users: use the installation folder such as:
+% Trouble shooting:
+% - For Unix users: use the installation folder such as:
 %   '/Applications/Inkscape.app/Contents/Resources/script ' as location. 
-%   - For Unix users: For some users the bash profiles do not allow to call 
+% - For Unix users: For some users the bash profiles do not allow to call 
 %   Inkscape in Matlab via bash. Therefore change the bash profile in Matlab 
 %   to something similar as setenv('DYLD_LIBRARY_PATH','/usr/local/bin/').
 %   The bash profile location can be found by using '/usr/bin/env bash'
-
-%   To do:
-%   - Annotation textbox objects
-%   - Allow multiple line text
-%   - Use findall(h,'-property','String')
-%   - Speed up code by smarter string replacement of SVG file
-%   - Size difference .svg and .fig if specifying units other than px.
-%       (Matlab limitation?)
 %
-%   Version:  1.3 / 1.4 / 1.5 / 1.6
+% To do:
+% - Annotation textbox objects
+% - Allow multiple line text
+% - Use findall(h,'-property','String')
+% - Speed up code by smarter string replacement of SVG file
+% - Size difference .svg and .fig if specifying units other than px.
+%     (Matlab limitation?)
+%
+% Version:  1.3 / 1.4 / 1.5 / 1.6/ 1.7/ 1.8
 %   Autor:    C. Schulte
-%   Date:     21.03.2022
+%   Date:     22.09.2022
 %   Contact:  C.Schulte@irt.rwth-aachen.de
-
-%   Version:  1.2
+%
+% Version:  1.2
 %   Autor:    J.J. de Jong, K.G.P. Folkersma
 %   Date:     20/04/2016
 %   Contact:  j.j.dejong@utwente.nl
 %
-%   Change log
-%   v 1.1 - 02/09/2015 (not released)
+% Change log:
+% v 1.1 - 02/09/2015 (not released)
 %   - Made compatible for Unix systems
 %   - Added a waitbar
 %   - Corrected the help file
-%   v 1.2 - 20/04/2016
+% v 1.2 - 20/04/2016
 %   - Fixed file names with spaces in the name. 
 %     (Not adviced to use in latex though)
 %   - Escape special characters in XML (<,>,',",&) 
 %     -> (&lt;,&gt;,&apos;,&quot;,&amp;)
-%   v 1.3 - 10/02/2022
+% v 1.3 - 10/02/2022
 %   - figure copy
 %   - check Inkscape dir
 %   - options as varargin or struct
 %   - waitbar optional
 %   - export to pdf optional
 %   - works with inkscape v1
-%   v 1.4 - 18/03/2022
+% v 1.4 - 18/03/2022
 %   - string as input allowed
 %   - closes the file, if the programm could not finish
 %   - inkscape path with white spaces allowed
-%   v 1.5 - 21/03/2022
+% v 1.5 - 21/03/2022
 %   - 2 options (Interpreter, useOrigFigure) added
 %   - fixed a bug, that only one subplot was copied
 %   - Constant Line objects added
-%   v 1.6 - 21/03/2022
+% v 1.6 - 21/03/2022
 %   - exponential exponents on axis added
 %   - not supported text-elements don't stop svg-export
-%   v 1.7 - 13/09/2022
+% v 1.7 - 13/09/2022
 %   - fixed a bug in colorbar
 %   - legend size is fixed based on initial position
 %   - added an option for fontSize
+% v 1.8 - 22/09/2022
+%   - changed 'doExportPDF' to 'OnlySVG'
+%   - added an option for Inkscape Export Mode
 
 %% ---------------- Config ------------------------------------------------
 % default inkscape location, e.g. 
@@ -158,7 +195,9 @@ opts.Renderer = 'painters'; % use the "painters" renderer, so that the text
 %                             elements can be found inside the svg
 opts.FontSize = 11;   % Font Size of all Text, use '' if the size should not be changed
 opts.doWaitbar = true;
-opts.doExportPDF = true;
+opts.OnlySVG = false;
+opts.Inkscape_Export_Mode = 'export-area-page'; % See https://wiki.inkscape.org/wiki/Using_the_Command_Line
+% 'export-area', 'export-area-drawing', 'export-use-hints'
 opts.Interpreter = ''; % matlab text interpreters, others: 'tex','none', '' -> dont change
 % ------------------------- Config end --------------------------- %
 opts = checkOptions(opts,varargin); % update default options based on information in varargin
@@ -209,7 +248,7 @@ if ~inkscape_valid
     if check_Inkscape_Dir(opts.DIR_INKSCAPE)
         setenv('DIR_INKSCAPE',opts.DIR_INKSCAPE);
     else
-    	opts.doExportPDF = false;
+    	opts.OnlySVG = true;
         warning([' - Plot2LaTeX: Inkscape Installation not found.  Matlab command "system(''"',opts.DIR_INKSCAPE,'" --version'')" was not successful.'])
     end
 else 
@@ -517,23 +556,23 @@ end
 
 
 %% ---------------- Invoke Inkscape to generate PDF + PDF_TeX -------------
-if opts.doExportPDF
+if ~opts.OnlySVG
     if opts.doWaitbar
         Step = Step + 1;
         waitbar(Step/nStep,hWaitBar,'Saving .svg to .pdf file');
     end
-    if check_Inkscape_Version(opts.DIR_INKSCAPE)
-        cmdtext = sprintf('"%s" "%s.svg" --export-filename="%s.pdf" --export-latex --export-area-page',...
-            opts.DIR_INKSCAPE, filename, filename);
+    if check_Inkscape_Version(opts.DIR_INKSCAPE) % inkscape v1 and above
+        cmdtext = sprintf('"%s" "%s.svg" --export-filename="%s.pdf" --export-latex --%s',...
+            opts.DIR_INKSCAPE, filename, filenam, opts.Inkscape_Export_Mode);
     else % inkscape v0
-        cmdtext = sprintf('"%s" "%s.svg" --export-pdf "%s.pdf" --export-latex -export-area-page',...
-            opts.DIR_INKSCAPE, filename, filename);
+        cmdtext = sprintf('"%s" "%s.svg" --export-pdf "%s.pdf" --export-latex -%s',...
+            opts.DIR_INKSCAPE, filename, filename, opts.Inkscape_Export_Mod);
     end
     [~,cmdout] = system(cmdtext);
 
     % test if a .pdf and .pdf_tex file exist
     if exist([filename,'.pdf'],'file')~= 2 || exist([filename,'.pdf_tex'],'file')~= 2
-        warning([' - Plot2LaTeX: No .pdf or .pdf_tex file produced, please check your Inkscape installation and specify installation directory correctly: ', cmdout])
+        warning([' - Plot2LaTeX: No .pdf or .pdf_tex file found, please check your Inkscape installation and specify installation directory correctly: ', cmdout])
     end
 end
 

@@ -19,15 +19,17 @@ and Inkscape v1.1.1
 - 'Renderer':'painters' (default), 'opengl', ''(no change)
 - 'yCorrFactor':     0.8 (default, in px)
 - 'DIR_INKSCAPE':    directory to inkscape.exe
-- 'doWaitbar':       true (default)
+- 'Verbose':         ['console' (default), 'waitbar', 'both', false], Should a waitbar appear to show progress or a console text
 - 'useOrigFigure'    false (default, Use the original figure or create a copy?)
-- 'doExportPDF':     true (default)
+- 'OnlySVG':         false (default), Option to stop after creating the svg file. Can be used, if the plots are used as svg files or if inkscape is not installed.
 - 'Interpreter':     'tex' (default, 'latex','none'), changes the matlab text interpreter
 - 'FontSize':        11 (default, in pt), should be equal to the font size inside of the document, use '' if the font size should not be changed before hand.
+- 'ReplaceList':     ['' (default), a cell with 2 columns, first column: text in figure, second column: new text in .svg], Should a placeholder text in the figure be  replaced with a LaTeX command that e.g. matlab can't correctly display? example : {'placeholder','\acr{thickness}'; 'placeholder2','$\exp{-4r^2}$'}
+- 'Inkscape_Export_Mode': ['export-area-page' (default), 'export-area', 'export-area-drawing', 'export-use-hints'], inkscape export options, see wiki.inkscape.org
 
 # Example function calls:
 - **PLOT2LATEX(gcf, 'FirstPlot')**
-- **PLOT2LATEX(gcf, 'FirstPlot', 'doWaitbar', false)**
+- **PLOT2LATEX(gcf, 'FirstPlot', 'Verbose', false)**
 - **PLOT2LATEX(gcf, 'FirstPlot', 'doExportPDF', false, 'FontSize', '')**
 
 # Info

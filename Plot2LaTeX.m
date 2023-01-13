@@ -141,57 +141,21 @@ function Plot2LaTeX(h_in, filename, varargin)
 % - Size difference .svg and .fig if specifying units other than px.
 %     (Matlab limitation?)
 %
-% Version:  1.3 / 1.4 / 1.5 / 1.6/ 1.7/ 1.8/ 1.9
+% Version:  1.3 / 1.4 / 1.5 / 1.6/ 1.7/ 1.8/ 1.9/ (1.10)
 %   Autor:    C. Schulte
-%   Date:     22.09.2022
+%   Date:     13.01.2023
 %   Contact:  C.Schulte@irt.rwth-aachen.de
+%
+% Version:  1.10
+%   Autor:    M. Zimmer
+%   Date:     13.01.2023
 %
 % Version:  1.2
 %   Autor:    J.J. de Jong, K.G.P. Folkersma
 %   Date:     20/04/2016
 %   Contact:  j.j.dejong@utwente.nl
 %
-% Change log:
-% v 1.1 - 02/09/2015 (not released)
-%   - Made compatible for Unix systems
-%   - Added a waitbar
-%   - Corrected the help file
-% v 1.2 - 20/04/2016
-%   - Fixed file names with spaces in the name.
-%     (Not adviced to use in latex though)
-%   - Escape special characters in XML (<,>,',",&)
-%     -> (&lt;,&gt;,&apos;,&quot;,&amp;)
-% v 1.3 - 10/02/2022
-%   - figure copy
-%   - check Inkscape dir
-%   - options as varargin or struct
-%   - waitbar optional
-%   - export to pdf optional
-%   - works with inkscape v1
-% v 1.4 - 18/03/2022
-%   - string as input allowed
-%   - closes the file, if the programm could not finish
-%   - inkscape path with white spaces allowed
-% v 1.5 - 21/03/2022
-%   - 2 options (Interpreter, useOrigFigure) added
-%   - fixed a bug, that only one subplot was copied
-%   - Constant Line objects added
-% v 1.6 - 21/03/2022
-%   - exponential exponents on axis added
-%   - not supported text-elements don't stop svg-export
-% v 1.7 - 13/09/2022
-%   - fixed a bug in colorbar
-%   - legend size is fixed based on initial position
-%   - added an option for fontSize
-% v 1.8 - 22/09/2022
-%   - changed 'doExportPDF' to 'OnlySVG'
-%   - added an option for Inkscape Export Mode
-% v 1.9 - 13/10/2022
-%   - manually positioned legends fixed
-%   - fixed a typo in line 569
-%   - replaceList added
-%   - FontSize 'auto' added
-%   - option 'waitbar' to 'Verbose' changed
+% Change log (end of File)
 
 
 %% ---------------- Config ------------------------------------------------
@@ -230,7 +194,7 @@ opts.OnlySVG = false;
 % Inkscape_Export_Mode = ['export-area', 'export-area-drawing',
 %                         'export-use-hints', 'export-area-page']
 %                      : See https://wiki.inkscape.org/wiki/Using_the_Command_Line
-opts.Inkscape_Export_Mode = 'export-area-page';
+opts.Inkscape_Export_Mode = 'export-area-drawing';
 
 % Interpreter = ['','tex','latex','none'] : matlab text interpreter option
 %                                           '' -> dont change
@@ -591,13 +555,15 @@ try
     fout = fopen([filename, '_temp.svg'], 'w'); % make a temp file for modification
 
     string_line_in = fgetl(fin); %skip first line
-    iLine = 1; % Line number
+    iLine       = 1; % Line number
     nFoundLabel = 0; % Counter of number of found labels
+    doRemoveRect = false;
     while ~feof(fin)
         string_line_out = string_line_in; % process new line
         iLine = iLine + 1;
         string_line_in = fgetl(fin);
 
+        % Find Text Elements in the SVG 
         FoundLabelText = regexp(string_line_in, '>.+</text', 'match'); %try to find label
         if ~isempty(FoundLabelText)
             iLabel = find(ismember({Labels.LabelText}, FoundLabelText{1}(2:end - 6))); % find label number
@@ -628,12 +594,30 @@ try
             string_line_out_temp = regexprep(string_line_out_temp, 'y="\S*"', ['y="', num2str(yOffset*opts.yCorrFactor), '"']);
 
             % Replace label with original string
-            string_line_in_temp = strrep(string_line_in, FoundLabelText{:}, text);
-
-            string_line_in = string_line_in_temp;
-            string_line_out = string_line_out_temp;
+            string_line_in = strrep(string_line_in, FoundLabelText{:}, text);
+            string_line_out = string_line_out_temp;   
         end
-        fprintf(fout, '%s\n', string_line_out);
+        
+        % Search for white rectangles that build the background -> "delete" corresponding lines
+        idxRect       = regexp(string_line_out, '<rect', 'once');  % search for rectangle
+        FoundRect     = ~isempty(idxRect);
+        FoundXInfo    = ~isempty(regexp(string_line_out, 'x="0"', 'once'));   % check x position of rectangle
+        FoundYInfo    = ~isempty(regexp(string_line_out, 'y="0"', 'once'));   % check y position of rectangle
+        FoundEndInfo    = ~isempty(regexp(string_line_out, '</g', 'once'));   % check for closing tag "</g"
+
+        if FoundRect && FoundXInfo && FoundYInfo
+            doRemoveRect = true;
+        end
+        if doRemoveRect && ~FoundEndInfo
+            string_line_out = '';
+        elseif doRemoveRect && FoundEndInfo
+            string_line_out = '    ></g';
+            doRemoveRect = false;
+        end
+        
+        if ~isempty(string_line_out)
+            fprintf(fout, '%s\n', string_line_out);
+        end
     end
     fprintf(fout, '%s\n', string_line_in);
 
@@ -969,3 +953,47 @@ else
     text = [];
 end
 end
+
+% Change log (end of File):
+% v 1.1 - 02/09/2015 (not released)
+%   - Made compatible for Unix systems
+%   - Added a waitbar
+%   - Corrected the help file
+% v 1.2 - 20/04/2016
+%   - Fixed file names with spaces in the name.
+%     (Not adviced to use in latex though)
+%   - Escape special characters in XML (<,>,',",&)
+%     -> (&lt;,&gt;,&apos;,&quot;,&amp;)
+% v 1.3 - 10/02/2022
+%   - figure copy
+%   - check Inkscape dir
+%   - options as varargin or struct
+%   - waitbar optional
+%   - export to pdf optional
+%   - works with inkscape v1
+% v 1.4 - 18/03/2022
+%   - string as input allowed
+%   - closes the file, if the programm could not finish
+%   - inkscape path with white spaces allowed
+% v 1.5 - 21/03/2022
+%   - 2 options (Interpreter, useOrigFigure) added
+%   - fixed a bug, that only one subplot was copied
+%   - Constant Line objects added
+% v 1.6 - 21/03/2022
+%   - exponential exponents on axis added
+%   - not supported text-elements don't stop svg-export
+% v 1.7 - 13/09/2022
+%   - fixed a bug in colorbar
+%   - legend size is fixed based on initial position
+%   - added an option for fontSize
+% v 1.8 - 22/09/2022
+%   - changed 'doExportPDF' to 'OnlySVG'
+%   - added an option for Inkscape Export Mode
+% v 1.9 - 13/10/2022
+%   - manually positioned legends fixed
+%   - fixed a typo in line 569
+%   - replaceList added
+%   - FontSize 'auto' added
+%   - option 'waitbar' to 'Verbose' changed
+% v 1.10 - 13/01/2023
+%   - Removes the white background of a figure, thanks to M.Zimmer

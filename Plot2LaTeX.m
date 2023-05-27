@@ -14,6 +14,9 @@ function Plot2LaTeX(h_in, filename, varargin)
 %   'yCorrFactor':     0.8 (default, in px)
 %                        Option for manually correcting the y position of
 %                        all text elements inside of the svg-file.
+%   'legCorrFactor':   1.02 (default, in percent so 102%)
+%                        Option for manually correct the horizontal size of
+%                        a legend entry.
 %   'DIR_INKSCAPE':    'inkscape.exe' (default), 'C:/Program Files/
 %                      Inkscape/bin/inkscape.exe'
 %                        directory to the inkscape.exe that is used inside
@@ -32,12 +35,15 @@ function Plot2LaTeX(h_in, filename, varargin)
 %   'Interpreter':     '' (default) , 'latex', 'none', 'tex'
 %                        changes the matlab text interpreter if not left
 %                        empty
-%   'FontSize':        11 (default), '', 12
+%   'FontSize':        auto (default), '', 'fixed', 14 (in pt)
 %                        Option to update the fontSize inside of the Figure
 %                        So that the proportions of the svg Plot are
 %                        correct use '' if the fontSize should not be
-%                        changed beforehand (could lead to wrong legend
-%                        sizes, etc.)
+%                        altered beforehand (could lead to wrong legend
+%                        sizes, etc.). Use 'fixed', if all fontsizes should
+%                        be set inside the SVG file corresponding to the
+%                        predefined fontsize. Use 'auto' if the prevalent
+%                        font size should be selected.
 %   'ReplaceList':     '' (default), [a cell with 2 columns, first column: 
 %                        text in figure, second column: new text in .svg]
 %             	         Should a placeholder text in the figure be 
@@ -45,8 +51,8 @@ function Plot2LaTeX(h_in, filename, varargin)
 %                        can't correctly display?
 %                        example : {'placeholder','\acr{thickness}';
 %                                   'placeholder2','$\exp{-4r^2}$'}
-%'Inkscape_Export_Mode': 'export-area-page' (default), 'export-area',
-%                        'export-area-drawing', 'export-use-hints'
+%'Inkscape_Export_Mode': 'export-area-drawing' (default), 'export-area',
+%                        'export-area-page', 'export-use-hints'
 %                        inkscape export options, see wiki.inkscape.org
 %
 % Example function calls:
@@ -95,7 +101,7 @@ function Plot2LaTeX(h_in, filename, varargin)
 %
 % Workflow:
 % - Matlab renames duplicate strings of the figure. The strings are
-%   stored to be used later. To prevent a change in texbox size, duplicate
+%   stored to be used later. To prevent a change in text size, duplicate
 %   labels get "." at the end of the label.
 % - Matlab saves the figure with modified labels to a svg file.
 % - Matlab opens the svg file and restores the labels with the original
@@ -113,50 +119,35 @@ function Plot2LaTeX(h_in, filename, varargin)
 % Limitation:
 % - Text resize is still done in PLOT2LATEX. The LaTeX fonts in matlab do
 %   not correspond completely with the LaTeX font size.
-% - Legend size is not always correct, use \hspace or \vspace in matlab
-%   legend to achieve a nicer fit. Requires some iterations.
-% - Rotating 3D images using toolbar does not work, using view([]) works.
 % - Text boxes with LaTeX code which is not interpretable by matlab
-%   results in too long text boxes.
+%   results in too long text boxes. Use a placeholder text with the option
+%   'ReplaceList' instead (the placeholder should have the right length).
 % - Very large figures sometimes result in very large waiting times.
 % - Older versions than matlab 2014b are not supported.
 % - PLOT2LATEX currently does not work with titles consisting of multiple
 %   lines.
 % - PLOT2LATEX does not work with annotation textbox objects.
-% - PLOT2LATEX does not support colored text.
-%
-% Trouble shooting:
-% - For Unix users: use the installation folder such as:
-%   '/Applications/Inkscape.app/Contents/Resources/script ' as location.
-% - For Unix users: For some users the bash profiles do not allow to call
-%   Inkscape in Matlab via bash. Therefore change the bash profile in Matlab
-%   to something similar as setenv('DYLD_LIBRARY_PATH','/usr/local/bin/').
-%   The bash profile location can be found by using '/usr/bin/env bash'
 %
 % To do:
 % - Annotation textbox objects
 % - Allow multiple line text
 % - Use findall(h,'-property','String')
-% - Speed up code by smarter string replacement of SVG file
 % - Size difference .svg and .fig if specifying units other than px.
 %     (Matlab limitation?)
 %
-% Version:  1.3 / 1.4 / 1.5 / 1.6/ 1.7/ 1.8/ 1.9/ (1.10)
-%   Autor:    C. Schulte
-%   Date:     13.01.2023
+% Version:  1.3 / 1.4 / 1.5 / 1.6/ 1.7/ 1.8/ 1.9/ 2.0
+%   Author:    C. Schulte
+%   Date:     27.05.2023
 %   Contact:  C.Schulte@irt.rwth-aachen.de
 %
 % Version:  1.10
-%   Autor:    M. Zimmer
+%   Author:    M. Zimmer
 %   Date:     13.01.2023
 %
 % Version:  1.2
-%   Autor:    J.J. de Jong, K.G.P. Folkersma
+%   Author:    J.J. de Jong, K.G.P. Folkersma
 %   Date:     20/04/2016
 %   Contact:  j.j.dejong@utwente.nl
-%
-% Change log (end of File)
-
 
 %% ---------------- Config ------------------------------------------------
 % default inkscape location, e.g.
@@ -166,21 +157,27 @@ function Plot2LaTeX(h_in, filename, varargin)
 opts.DIR_INKSCAPE = 'inkscape';
 if ~isempty(getenv('DIR_INKSCAPE')) % check if environment variable already exists
     opts.DIR_INKSCAPE = getenv('DIR_INKSCAPE');
+    check_INKSCAPE_Installation = false;
+else
+    check_INKSCAPE_Installation = true;
 end
 
-% yCorrFactor = [any number]: correcting the y position of all text elements
+% yCorrFactor = [any number]: correcting the y position of some text elements
 opts.yCorrFactor = 0.8;
 
-% useOrigFigure = [false, true] : should the original figure be used or
-%       copied?
+% legCorrFactor = [any number]: correcting the legend horizontal size in percent
+opts.legCorrFactor = 1.02;
+
+% useOrigFigure = [false, true] : should the original figure be used or copied?
 opts.useOrigFigure = false;
 
 % Renderer = ['painters','opengl',...] : "painters" renderer recommended
 opts.Renderer = 'painters';
 
-% FontSize = ['', 'auto', any number in pt] : Font Size of all Text,
+% FontSize = ['auto', 'fixed', '', any number in pt] : Font Size of all Text,
 %       use '' if the size should not be changed, use 'auto' if the primary
-%       fontsize should be evaluated
+%       fontsize should be evaluated, use 'fixed', if all text should stay
+%       in the predefined fontsizes 
 opts.FontSize = 'auto';
 
 % Verbose = ['waitbar', 'console', 'both', false] : Should a waitbar appear
@@ -191,6 +188,7 @@ opts.Verbose = 'console';
 %       be used, if the plots are used as svg files or if inkscape is not
 %       installed.
 opts.OnlySVG = false;
+
 % Inkscape_Export_Mode = ['export-area', 'export-area-drawing',
 %                         'export-use-hints', 'export-area-page']
 %                      : See https://wiki.inkscape.org/wiki/Using_the_Command_Line
@@ -266,6 +264,17 @@ end
 
 %% ---------------- Check Font Size ---------------------------------------
 if strcmp(opts.FontSize, 'auto')
+    opts.FontSizeMode = 'set';
+elseif strcmp(opts.FontSize, 'fixed')
+    opts.FontSizeMode = 'fixed';
+elseif strcmp(opts.FontSize, '')
+    opts.FontSizeMode = 'none';
+else
+    opts.FontSizeMode = 'set';
+end
+
+% Evaluate median fontsize -> default size
+if strcmp(opts.FontSize, 'auto') || strcmp(opts.FontSize, 'fixed')
     FontSizes = cell2mat(get(findall(h, '-property', 'FontSize'), 'FontSize'));
     if ~isempty(FontSizes)
         opts.FontSize = median(FontSizes);
@@ -275,9 +284,13 @@ if strcmp(opts.FontSize, 'auto')
         end
     end
 end
-if ~isempty(opts.FontSize)
+
+% Set Font Sizes
+if strcmp(opts.FontSizeMode,'set') && ~isempty(opts.FontSize)
     set(findall(h, '-property', 'FontSize'), 'FontSize', opts.FontSize)
-    drawnow
+    set(findall(h, '-property', 'LabelFontSizeMultiplier'), 'LabelFontSizeMultiplier', 1)
+    set(findall(h, '-property', 'TitleFontSizeMultiplier'), 'TitleFontSizeMultiplier', 1)
+    %drawnow
     if opts.Verbose(2)
         disp([' - Plot2LaTeX.m: Fontsize of the figure set to "', num2str(opts.FontSize), '".'])
     end
@@ -294,24 +307,25 @@ end
 
 
 %% ---------------- test if inkscape installation is correct --------------
-inkscape_valid = check_Inkscape_Dir(opts.DIR_INKSCAPE);
-if ~inkscape_valid && ~opts.OnlySVG
-    if opts.Verbose(2)
-        disp([' - Plot2LaTeX.m: Invalid Inkcape path. Opening the UI.'])
-    end
-    [file, pathname] = uigetfile('inkscape.exe', [opts.DIR_INKSCAPE, ' cannot be found, please select "inkscape.exe".']');
-    opts.DIR_INKSCAPE = fullfile(pathname, file);
-    if check_Inkscape_Dir(opts.DIR_INKSCAPE)
+if check_INKSCAPE_Installation
+    inkscape_valid = check_Inkscape_Dir(opts.DIR_INKSCAPE);
+    if ~inkscape_valid && ~opts.OnlySVG
+        if opts.Verbose(2)
+            disp(' - Plot2LaTeX.m: Invalid Inkcape path. Opening the UI.')
+        end
+        [file, pathname] = uigetfile('inkscape.exe', [opts.DIR_INKSCAPE, ' cannot be found, please select "inkscape.exe".']');
+        opts.DIR_INKSCAPE = fullfile(pathname, file);
+        if check_Inkscape_Dir(opts.DIR_INKSCAPE)
+            setenv('DIR_INKSCAPE', opts.DIR_INKSCAPE);
+        else
+            opts.OnlySVG = true;
+            disp([' - Plot2LaTeX.m: Inkscape Installation not found.  Matlab command "system(''"', opts.DIR_INKSCAPE, '" --version'')" was not successful.'])
+        end
+    elseif inkscape_valid
+        disp(' - Plot2LaTeX.m: Inkscape Installation found.')
         setenv('DIR_INKSCAPE', opts.DIR_INKSCAPE);
-    else
-        opts.OnlySVG = true;
-        disp([' - Plot2LaTeX.m: Inkscape Installation not found.  Matlab command "system(''"', opts.DIR_INKSCAPE, '" --version'')" was not successful.'])
     end
-elseif inkscape_valid
-    disp(' - Plot2LaTeX.m: Inkscape Installation found.')
-    setenv('DIR_INKSCAPE', opts.DIR_INKSCAPE);
 end
-
 
 %% ---------------- Check matlab version ----------------------------------
 if verLessThan('matlab', '8.4.0.')
@@ -328,23 +342,17 @@ ConstLineObj = findall(h, 'Type', 'ConstantLine');
 
 PosAnchSVG = {'start', 'middle', 'end'};
 PosAligmentSVG = {'start', 'center', 'end'};
-PosAligmentMAT = {'left', 'center', 'right'};
 
 ChangeInterpreter(h, opts.Interpreter) % Change Interpreter if specified
 h.PaperPositionMode = 'auto'; % Keep current size
-getShortName(true); % reset the persistent variable
-
-
-%% ---------------- Check Legend Position ---------------------------------
-n_LegObj = length(LegObj);
-legend_Position = cell(n_LegObj, 1);
-for i = 1:n_LegObj
-    drawnow
-    legend_Position{i} = LegObj(i).Position;
-end
+getShortName('','',true); % reset the persistent variable
 
 
 %% ---------------- Replace text with a label -----------------------------
+Labels = struct('type','','TrueText','','FontSize','','Color','','Alignment','',...
+    'Anchor','','setLabel','','Position','','Obj','','mode','','LabelText','','XMLText','');
+Labels(1) = [];
+
 if opts.Verbose(1)
     Step = Step + 1;
     waitbar(Step/nStep, hWaitBar, 'Cataloging all text elements.');
@@ -353,173 +361,61 @@ if opts.Verbose(2)
     disp(' - Plot2LaTeX.m: Cataloging all text elements.');
 end
 
-% Init Labels
-Labels = struct('TrueText', '', 'Alignment', '', 'Anchor', '', 'Position', '');
-Labels(1) = [];
-
-iLabel = 0; % generate label iterator
-n_TexObj = length(TexObj);
-for i = 1:n_TexObj % do for text, titles and axes labels
+for i = 1:length(TexObj) % do for text, titles and axes labels
     if ~isempty(TexObj(i).String)
-        iLabel = iLabel + 1;
-
-        % find text string
-        Labels(iLabel).TrueText = TexObj(i).String; %#ok<*AGROW>
-
-        % find text aligment
-        Labels(iLabel).Alignment = PosAligmentSVG{ismember(PosAligmentMAT, TexObj(i).HorizontalAlignment)};
-        % find achor aligment svg uses this
-        Labels(iLabel).Anchor = PosAnchSVG{ismember(PosAligmentMAT, TexObj(i).HorizontalAlignment)};
-        % generate label
-        [Labels, changed] = LabelText(iLabel, Labels, opts);
-        if changed
-            TexObj(i).String = Labels(iLabel).LabelText;
-        end
-
-        %find text position
-        Labels(iLabel).Position = TexObj(i).Position;
+        Labels = addElement(TexObj(i),'Text',Labels);
     end
 end
-
-
-%% ---------------- legend objects ----------------------------------------
-n_LegObj = length(LegObj);
-for i = 1:n_LegObj
-    n_Str = length(LegObj(i).String);
-
-    doShortString = strcmp(LegObj(i).Orientation, 'vertical');
-
-    for j = 1:n_Str
-        iLabel = iLabel + 1;
-
-        Labels(iLabel).TrueText = LegObj(i).String{j};
-        Labels(iLabel).Alignment = PosAligmentSVG{1}; % legends are always left aligned
-        Labels(iLabel).Anchor = PosAnchSVG{1};
-
-        % generate legend label as a short string ('a' -> 'z')
-        [Labels, changed] = LabelText(iLabel, Labels, opts, doShortString);
-        if changed
-            LegObj(i).String{j} = Labels(iLabel).LabelText;
-        end
-    end
-
-    LegObj(i).Location = 'northwest';
-    % Check if the substitute label are long enough
-    while LegObj(i).Position(3) < legend_Position{i}(3) * 0.97 && doShortString
-        Labels(iLabel).LabelText = [Labels(iLabel).LabelText, '.'];
-        LegObj(i).String{j} = Labels(iLabel).LabelText;
-    end
-    LegObj(i).Position = legend_Position{i};
+for i = 1:length(ColObj) % color bar objects
+    Labels = addElement(ColObj(i),'ColorBar',Labels);
 end
-
-
-%% ---------------- color bar objects -------------------------------------
-n_ColObj = length(ColObj);
-for i = 1:n_ColObj
-    isAxIn = strcmp(ColObj(i).AxisLocation, 'in'); % find internal external text location
-    location = ColObj(i).Location;
-    if contains(location, 'east') && isAxIn % text is right aligned
-        Alignment = PosAligmentSVG{3};
-        Anchor = PosAnchSVG{3};
-    elseif contains(location, 'east') % text is left aligned
-        Alignment = PosAligmentSVG{1};
-        Anchor = PosAnchSVG{1};
-    elseif contains(location, 'west') && isAxIn % text is left aligned
-        Alignment = PosAligmentSVG{1};
-        Anchor = PosAnchSVG{1};
-    elseif contains(location, 'west') % text is right aligned
-        Alignment = PosAligmentSVG{3};
-        Anchor = PosAnchSVG{3};
-    else % text is centered
-        Alignment = PosAligmentSVG{2};
-        Anchor = PosAnchSVG{2};
-    end
-
-    n_Str = length(ColObj(i).TickLabels);
-    for j = 1:n_Str
-        iLabel = iLabel + 1;
-        Labels(iLabel).TrueText = ColObj(i).TickLabels{j};
-        Labels(iLabel).Alignment = Alignment;
-        Labels(iLabel).Anchor = Anchor;
-
-        [Labels, changed] = LabelText(iLabel, Labels, opts);
-        if changed
-            ColObj(i).TickLabels{j} = Labels(iLabel).LabelText;
-        end
-    end
+for i = 1:length(LegObj) % legend objects  
+    LegObj(i).Units = 'pixels';
+    Labels = addElement(LegObj(i),'Legend',Labels);
 end
-
-
-%%  ---------------- Constant line objects --------------------------------
-n_ConstLineObj = length(ConstLineObj);
-for i = 1:n_ConstLineObj % do for text, titles and axes labels
+for i = 1:length(ConstLineObj) % Constant line objects
     if ~isempty(ConstLineObj(i).Label)
-        iLabel = iLabel + 1;
-
-        % find text string
-        Labels(iLabel).TrueText = ConstLineObj(i).Label; %#ok<*AGROW>
-
-        % find text aligment
-        Labels(iLabel).Alignment = PosAligmentSVG{2};
-        % find achor aligment svg uses this
-        if isequal(ConstLineObj(i).InterceptAxis, 'y')
-            p_temp = {'top', 'middle', 'bottom'};
-        else
-            p_temp = {'bottom', 'middle', 'top'};
-        end
-        Labels(iLabel).Anchor = PosAnchSVG{ismember(p_temp, ConstLineObj(i).LabelVerticalAlignment)};
-        % generate label
-        [Labels, changed] = LabelText(iLabel, Labels, opts);
-        if changed
-            ConstLineObj(i).Label = Labels(iLabel).LabelText;
-        end
-
-        %find text position
-        Labels(iLabel).Position = [];
+        Labels = addElement(ConstLineObj(i),'ConstantLine',Labels);
     end
 end
-
-
-%% ---------------- do similar for axes objects, XTick, YTick, ZTick ------
-n_AxeObj = length(AxeObj);
-for i = 1:n_AxeObj
-
+for i = 1:length(AxeObj) %do similar for axes objects, XTick, YTick, ZTick
     % Y-Axis
-    if strcmp(AxeObj(i).YAxisLocation, 'right')
-        % exeption for yy-plot, aligment is left for the right axis
-        alignment = PosAligmentSVG{1}; %left
-        anchor = PosAnchSVG{1}; %left
-    else % normal y labels are right aligned
-        alignment = PosAligmentSVG{3}; %right
-        anchor = PosAnchSVG{3}; %right
+    if strcmp(AxeObj(i).YAxisLocation, 'right') % exeption for yy-plot, aligment is left for the right axis
+        type = 'YYAxis';
+    else % normal y labels
+        type = 'YAxis';
     end
-    [Labels, iLabel] = checkAxis(AxeObj(i).YAxis, Labels, iLabel, alignment, anchor, opts);
-
-    % Z-Tick
-    alignment = PosAligmentSVG{3}; %right
-    anchor = PosAnchSVG{3}; %right
-    [Labels, iLabel] = checkAxis(AxeObj(i).ZAxis, Labels, iLabel, alignment, anchor, opts);
-
+    Labels = addElement(AxeObj(i).YAxis,type,Labels);
+end
+for i = 1:length(AxeObj) %do similar for axes objects, XTick, YTick, ZTick
+    % Z-Axis
+    Labels = addElement(AxeObj(i).ZAxis,'ZAxis', Labels);
+end
+for i = 1:length(AxeObj) %do similar for axes objects, XTick, YTick, ZTick
     % X-Axis
-    alignment = PosAligmentSVG{2}; %center
-    anchor = PosAnchSVG{2}; %center
-    [Labels, iLabel] = checkAxis(AxeObj(i).XAxis, Labels, iLabel, alignment, anchor, opts);
+    Labels = addElement(AxeObj(i).XAxis,'XAxis', Labels);
+end
+
+% Support for exponential expression
+% original figure: x10^exponent, in exported svg-file: #10^exponent
+% replace # with x:
+i = length(Labels)+1;
+Labels(i).LabelText = {'#'};
+Labels(i).TrueText = {'$\times$'};
+Labels(i).Alignment = PosAligmentSVG{1};
+Labels(i).Anchor = PosAnchSVG{1};
+Labels(i).Color = {[0,0,0]};
+Labels(i).type = 'None';
+
+% Create the XML Text for each element
+nLabel = length(Labels);
+for iLabel = 1:nLabel
+    Labels(iLabel).XMLText = Text2LaTeX(Labels(iLabel), opts);
 end
 
 
 %% ---------------- set text interpreter to plain text --------------------
 ChangeInterpreter(h, 'none');
-drawnow
-
-
-%% ---------------- Support for exponential expression --------------------
-% original figure: x10^exponent, in exported svg-file: #10^exponent
-% replace # with x:
-iLabel = iLabel + 1;
-Labels(iLabel).LabelText = '#';
-Labels(iLabel).TrueText = '$\times$';
-Labels(iLabel).Alignment = PosAligmentSVG{1};
-Labels(iLabel).Anchor = PosAnchSVG{1};
 
 
 %% ---------------- Save to fig and SVG -----------------------------------
@@ -543,94 +439,14 @@ if opts.Verbose(1)
     waitbar(Step/nStep, hWaitBar, 'Restoring text in .svg file');
 end
 if opts.Verbose(2)
-    disp([' - Plot2LaTeX.m: Restoring text in .svg file.'])
-end
-nLabel = iLabel;
-for iLabel = 1:nLabel
-    Labels(iLabel).XMLText = EscapeXML(Labels(iLabel).TrueText);
+    disp(' - Plot2LaTeX.m: Restoring text in .svg file.')
 end
 
 try
-    fin = fopen([filename, '.svg']); % open svg file
-    fout = fopen([filename, '_temp.svg'], 'w'); % make a temp file for modification
-
-    string_line_in = fgetl(fin); %skip first line
-    iLine       = 1; % Line number
-    nFoundLabel = 0; % Counter of number of found labels
-    doRemoveRect = false;
-    while ~feof(fin)
-        string_line_out = string_line_in; % process new line
-        iLine = iLine + 1;
-        string_line_in = fgetl(fin);
-
-        % Find Text Elements in the SVG 
-        FoundLabelText = regexp(string_line_in, '>.+</text', 'match'); %try to find label
-        if ~isempty(FoundLabelText)
-            iLabel = find(ismember({Labels.LabelText}, FoundLabelText{1}(2:end - 6))); % find label number
-            if ~isempty(iLabel)
-                doAlignment = true;
-                nFoundLabel = nFoundLabel + 1;
-                alignment = Labels(iLabel).Alignment;
-                anchor = Labels(iLabel).Anchor;
-                text = ['>', Labels(iLabel).XMLText, '</text'];
-            else
-                doAlignment = true;
-                alignment = PosAligmentSVG{1};
-                anchor = PosAnchSVG{1};
-                text = FoundLabelText{1};
-            end
-
-            % Append text alignment in prevous line
-            if doAlignment
-                string_line_out_temp = [string_line_out(1:end-1), 'text-align:', alignment, ';text-anchor:', anchor, '"'];
-            end
-
-            % correct x - position offset
-            string_line_out_temp = regexprep(string_line_out_temp, 'x="\S*"', 'x="0"');
-
-            % correct y - position offset, does not work correctly
-            [startIndex, endIndex] = regexp(string_line_out_temp, 'y="\S*"');
-            yOffset = str2double(string_line_out_temp((startIndex + 3):(endIndex - 1)));
-            string_line_out_temp = regexprep(string_line_out_temp, 'y="\S*"', ['y="', num2str(yOffset*opts.yCorrFactor), '"']);
-
-            % Replace label with original string
-            string_line_in = strrep(string_line_in, FoundLabelText{:}, text);
-            string_line_out = string_line_out_temp;   
-        end
-        
-        % Search for white rectangles that build the background -> "delete" corresponding lines
-        idxRect       = regexp(string_line_out, '<rect', 'once');  % search for rectangle
-        FoundRect     = ~isempty(idxRect);
-        FoundXInfo    = ~isempty(regexp(string_line_out, 'x="0"', 'once'));   % check x position of rectangle
-        FoundYInfo    = ~isempty(regexp(string_line_out, 'y="0"', 'once'));   % check y position of rectangle
-        FoundEndInfo    = ~isempty(regexp(string_line_out, '</g', 'once'));   % check for closing tag "</g"
-
-        if FoundRect && FoundXInfo && FoundYInfo
-            doRemoveRect = true;
-        end
-        if doRemoveRect && ~FoundEndInfo
-            string_line_out = '';
-        elseif doRemoveRect && FoundEndInfo
-            string_line_out = '    ></g';
-            doRemoveRect = false;
-        end
-        
-        if ~isempty(string_line_out)
-            fprintf(fout, '%s\n', string_line_out);
-        end
-    end
-    fprintf(fout, '%s\n', string_line_in);
-
-    fclose(fin);
-    fclose(fout);
-    movefile([filename, '_temp.svg'], [filename, '.svg'])
-    if nFoundLabel == 0
-        warning(' - Plot2LaTeX.m: No text elements found and updated. Please check if no text is used or if the Renderer is "painters".')
-    end
+    updateSVG(filename, Labels, opts)
 catch
     warning(' - Plot2LaTeX.m: Could not update the svg. No permission?')
     fclose('all');
-    delete([filename, '_temp.svg']);
 end
 
 
@@ -667,86 +483,471 @@ end
 close(h)
 end
 
+%% ------------------------------------------------------------------------
+function Labels = addElement(elem, type, Labels)
+PosAnchSVG = {'start', 'middle', 'end', 'auto'};
+PosAligmentSVG = {'start', 'center', 'end', 'auto'};
+PosAnchMAT = {'left', 'center', 'right'};
+PosAligmentMAT = {'top', 'middle', 'bottom'};
+
+% iLabel = length(Labels);
+
+persistent list
+
+if isempty(list)
+    % Text Elements
+    list = struct('type','Text','TrueText',@(obj) {obj.String},...
+        'FontSize',@(obj) {obj.FontSize},'Color',@(obj) {obj.Color},...
+        'Alignment',@(obj) PosAligmentSVG{ismember(PosAligmentMAT, obj.VerticalAlignment)},...
+        'Anchor',@(obj) PosAnchSVG{ismember(PosAnchMAT, obj.HorizontalAlignment)},...
+        'setLabel',@(obj,label) @(label) set(obj,'String',label),...
+        'Position',@(obj) '','Obj',@(obj) obj,'mode', 1,'XMLText','');
+    
+    % Legend Elements
+    list(2) = struct('type','Legend','TrueText',@(obj) erv(obj.String),...
+        'FontSize',@(obj) {obj.FontSize},'Color',@(obj) {obj.TextColor},...
+        'Alignment', PosAligmentSVG{2},...
+        'Anchor', PosAnchSVG{1},...
+        'setLabel',{@(obj,label) @(label) set(obj,'String',label)},...
+        'Position',@(obj) obj.Position,'Obj',@(obj) obj,'mode', @(obj) strcmp(obj.Orientation,'horizontal')+1,'XMLText','');
+    
+    % ColorBar Elements
+    list(3) = struct('type','ColorBar','TrueText',@(obj) erv(obj.TickLabels),...
+        'FontSize',@(obj) {obj.FontSize},'Color',@(obj) {obj.Color},...
+        'Alignment',@(obj) getAlignmentColorBar(obj),...
+        'Anchor',@(obj) getAnchorColorBar(obj),...
+        'setLabel',{@(obj,label) @(label) set(obj,'TickLabels',label)},...
+        'Position',@(obj) '','Obj',@(obj) obj,'mode', 0,'XMLText','');
+    
+    % Constant Line Elements
+    list(4) = struct('type','ConstantLine','TrueText',@(obj) {obj.Label},...
+        'FontSize',@(obj) {obj.FontSize},'Color',@(obj) {obj.Color},...
+        'Alignment',@(obj) getAlignmentConstantLine(obj), ...
+        'Anchor',@(obj) getAnchorConstantLine(obj),...
+        'setLabel',{@(obj,label) @(label) set(obj,'Label',label)},...
+        'Position',@(obj) '','Obj',@(obj) obj,'mode', 0,'XMLText','');
+    
+    % YAxis Elementt
+    list(5) = struct('type','YAxis','TrueText',@(obj) erv(obj.TickLabels),...
+        'FontSize',@(obj) {obj.FontSize},'Color',@(obj) {obj.Color},...
+        'Alignment',PosAligmentSVG{4},...
+        'Anchor',PosAnchSVG{4},... 
+        'setLabel',{@(obj,label) @(label) set(obj,'TickLabels',label)},...
+        'Position',@(obj) '','Obj',@(obj) obj,'mode', @(obj) (obj.Exponent~=0)*3,'XMLText','');
+    
+    % YY-Plot Element
+    list(6) = struct('type','YYAxis','TrueText',@(obj) erv(obj.TickLabels),...
+        'FontSize',@(obj) {obj.FontSize},'Color',@(obj) {obj.Color},...
+        'Alignment',PosAligmentSVG{4},...
+        'Anchor',PosAnchSVG{4},... 
+        'setLabel',{@(obj,label) @(label) set(obj,'TickLabels',label)},...
+        'Position',@(obj) '','Obj',@(obj) obj,'mode', @(obj) (obj.Exponent~=0)*3,'XMLText','');
+    
+    % XAxis
+    list(7) = struct('type','XAxis','TrueText',@(obj) erv(obj.TickLabels),...
+        'FontSize',@(obj) {obj.FontSize},'Color',@(obj) {obj.Color},...
+        'Alignment',PosAligmentSVG{4},...
+        'Anchor',PosAnchSVG{4},... 
+        'setLabel',{@(obj,label) @(label) set(obj,'TickLabels',label)},...
+        'Position',@(obj) '','Obj',@(obj) obj,'mode', @(obj) (obj.Exponent~=0)*3,'XMLText','');
+    
+    %ZAxis
+    list(8) = struct('type','ZAxis','TrueText',@(obj) erv(obj.TickLabels),...
+        'FontSize',@(obj) {obj.FontSize},'Color',@(obj) {obj.Color},...
+        'Alignment',PosAligmentSVG{4},...
+        'Anchor',PosAnchSVG{4},... 
+        'setLabel',{@(obj,label) @(label) set(obj,'TickLabels',label)},...
+        'Position',@(obj) '','Obj',@(obj) obj,'mode', @(obj) (obj.Exponent~=0)*3,'XMLText','');
+end
+
+
+idxElement = ismember({list.type},type);
+if any(idxElement)
+    listElement = list(idxElement);
+    names = fieldnames(listElement);
+    data = cell(2,length(names));
+    for idx = 1:length(names)
+        if ~isa(listElement.(names{idx}),'function_handle')
+            data(:,idx) = [names(idx);listElement.(names{idx})];
+        else
+            data(:,idx) = [names(idx);{{listElement.(names{idx})(elem)}}];
+        end
+    end
+    
+    % Create Struct
+    newLabel = struct(data{:});
+    [newLabel,changed] = getShortName(newLabel,newLabel.mode);
+    
+    % Rename if needed
+    if changed
+        newLabel.setLabel(newLabel.LabelText);
+    end
+    Labels = [Labels,newLabel];
+end
+
+function Alignment = getAlignmentColorBar(obj)
+isAxIn = strcmp(obj.AxisLocation, 'in'); % find internal external text location
+    location = obj.Location;
+    if contains(location, 'east') && isAxIn % text is right aligned
+        Alignment = PosAligmentSVG{2};
+    elseif contains(location, 'east') % text is left aligned
+        Alignment = PosAligmentSVG{2};
+    elseif contains(location, 'west') && isAxIn % text is left aligned
+        Alignment = PosAligmentSVG{2};
+    elseif contains(location, 'west') % text is right aligned
+        Alignment = PosAligmentSVG{2};
+    else % text is centered
+        Alignment = PosAligmentSVG{4};
+    end
+end
+function Anchor = getAnchorColorBar(obj)
+isAxIn = strcmp(obj.AxisLocation, 'in'); % find internal external text location
+    location = obj.Location;
+    if contains(location, 'east') && isAxIn % text is right aligned
+        Anchor = PosAnchSVG{3};
+    elseif contains(location, 'east') % text is left aligned
+        Anchor = PosAnchSVG{1};
+    elseif contains(location, 'west') && isAxIn % text is left aligned
+        Anchor = PosAnchSVG{1};
+    elseif contains(location, 'west') % text is right aligned
+        Anchor = PosAnchSVG{3};
+    else % text is centered
+        Anchor = PosAnchSVG{2};
+    end
+end
+function Alignment = getAlignmentConstantLine(obj)
+isXLine = strcmp(obj.InterceptAxis, 'x');
+if isXLine
+    Alignment = PosAligmentSVG{ismember(fliplr(PosAnchMAT),obj.LabelHorizontalAlignment)};
+else
+    Alignment = PosAligmentSVG{ismember(fliplr(PosAligmentMAT),obj.LabelVerticalAlignment)};
+end
+end
+function Anchor = getAnchorConstantLine(obj)
+isXLine = strcmp(obj.InterceptAxis, 'x');
+if isXLine 
+    Anchor = PosAnchSVG{ismember(fliplr(PosAligmentMAT),obj.LabelVerticalAlignment)};
+else
+    Anchor = PosAnchSVG{ismember(PosAnchMAT,obj.LabelHorizontalAlignment)};
+end
+end
+end
 
 %% ------------------------------------------------------------------------
-function [Labels, iLabel] = checkAxis(ax, Labels, iLabel, alignment, anchor, opts)
-n_labels = length(ax.TickLabels);
-if ax.Exponent ~= 0
-    suffix = '';
-    origFormat = ax.TickLabelFormat;
-    list = {Labels.LabelText};
-    doChange = any(ismember(ax.TickLabels, list));
-    while doChange
-        suffix = [suffix, '.'];
-        ax.TickLabelFormat = [origFormat, suffix];
-        doChange = any(ismember(ax.TickLabels, list));
-    end
+function updateSVG(filename, Labels, opts)
 
-    for j = 1:n_labels
-        iLabel = iLabel + 1;
-        if isempty(suffix)
-            Labels(iLabel).TrueText = ax.TickLabels{j};
-            Labels(iLabel).LabelText = ax.TickLabels{j};
+% Load SVG to memory and change the line breaks
+text = parseSVG(filename);
+fout = fopen([filename, '.svg'], 'w'); % open svg file
+nFoundLabel = 0;
+
+text = checkForLegend(text, Labels, opts);
+LabelList = {Labels.LabelText};
+
+getLabelIndex = @(label) cellfun(@(x) any(ismember(x,label)),LabelList,'UniformOutput', true);
+
+% Loop over every line in svg-text
+for line_idx = 1:length(text)
+    text_line = text{line_idx};
+
+    % Search for text elements, extract 4 tokens (x-pos, y-pos, style, text-label)
+    pattern1 = '<text.*x="([-0-9.]+)".*y="([-0-9.]+)".*style="(.*)".*>(.*)<\/text>';
+    tokens = regexp(text_line, pattern1,'tokens'); %try to find Text label
+    if ~isempty(tokens)
+        FoundLabelText = tokens{1}{4};
+        iLabel = getLabelIndex(FoundLabelText); % find label number
+        if nnz(iLabel)
+            alignment = Labels(iLabel).Alignment;
+            anchor = Labels(iLabel).Anchor;
+            idxText = ismember(Labels(iLabel).LabelText,FoundLabelText);
+            newText = Labels(iLabel).XMLText{idxText};
         else
-            Labels(iLabel).LabelText = ax.TickLabels{j};
-            Labels(iLabel).TrueText = Labels(iLabel).LabelText(1:end-length(suffix));
+            alignment = 'start';
+            anchor = 'start';
+            newText = FoundLabelText;
         end
-        Labels(iLabel).Alignment = alignment;
-        Labels(iLabel).Anchor = anchor;
-    end
-else
-    for j = 1:n_labels
-        iLabel = iLabel + 1;
-        Labels(iLabel).Alignment = alignment;
-        Labels(iLabel).Anchor = anchor;
-        Labels(iLabel).TrueText = ax.TickLabels{j};
-        [Labels, changed] = LabelText(iLabel, Labels, opts);
-        if changed
-            ax.TickLabels{j} = Labels(iLabel).LabelText;
+        
+        % XOffset
+        XOffset = str2double(tokens{1}{1});
+        if strcmp(anchor,'auto')
+            approxEnd = 4 + length(FoundLabelText) * Labels(iLabel).FontSize{:} * 0.4;
+            approxCenter = length(FoundLabelText) * Labels(iLabel).FontSize{:} * 0.28;
+            if XOffset == 0
+                anchor = 'start';
+            elseif abs(XOffset + approxCenter) < abs(XOffset + approxEnd)
+                anchor = 'middle';
+            else
+                anchor = 'end';
+            end
         end
-    end
-end
-end
+        newXOffset = '0';
+        
+        % Create new Style
+        newStyle = [tokens{1}{3},';text-anchor:',anchor,';']; % ';text-align:',alignment
 
+        % Create new Offsets
+        switch alignment
+            case 'start'
+                newYOffset = num2str(Labels(iLabel).FontSize{:}*1.12);
+            case 'center'
+                newYOffset = num2str(Labels(iLabel).FontSize{:}*0.44);
+            case 'end'
+                newYOffset = num2str(-Labels(iLabel).FontSize{:}*0.24);
+            case 'auto'
+                newYOffset = num2str(str2double(tokens{1}{2})*opts.yCorrFactor);
+        end
+        
+        % Regular expression replace, everything in the parentheses won't be changed
+        pattern2 = '(<text.*x=")[-0-9.]+(".*y=")[-0-9.]+(".*style=").*(".*>).*(<\/text>)';
+        text_line = regexprep(text_line, pattern2, ['$1',newXOffset,'$2',newYOffset,'$3',newStyle,'$4',newText,'$5']);
+        nFoundLabel = nFoundLabel +1;
+    end
+
+    % Search for white rectangles that build the background -> "delete" corresponding lines
+    pattern3 = '<g.*style="fill:white;.*stroke:white;".*><rect.*x="0".*y="0".*</g>';
+    text_line = regexprep(text_line, pattern3, '');
+    
+    fprintf(fout, '%s\n', text_line);
+end
+fclose(fout);
+if nFoundLabel == 0
+    warning(' - Plot2LaTeX.m: No text elements found and updated. Please check if no text is used or if the Renderer is "painters" and if there are any characters present that can''t be correctly printed to text.')
+end
+end
 
 %% ------------------------------------------------------------------------
-function [Labels, changed] = LabelText(index, Labels, opts, doShorten)
-% LABELTEXT generates labels based on label number
-% Checks if the text already exists
-% Checks if the text should be replaced by a short label for svg-creation
-% or afterwards based on opts.replaceList
-if nargin == 3 % Check Input
-    doShorten = false;
+function text = checkForLegend(text, Labels, opts)
+isLegend = arrayfun(@(x)strcmp(x.type,'Legend')&& x.mode == 1,Labels);
+
+% getSVGSize:
+pattern1 = '<rect x="0" width="([0-9]+)" height="([0-9]+)" y="0"';
+[tokens] = regexp(text,pattern1,'tokens');
+idx_Valid = find(cellfun(@(x) ~isempty(x),tokens),1);
+height = str2double(tokens{idx_Valid}{1}{2});
+
+for idx_is_legend = find(isLegend)
+    labelsStr = strjoin(Labels(idx_is_legend).LabelText,'|');
+    pattern2 = ['<text.*x="[-0-9.]+".*y="[-0-9.]+".*style=".*".*>(',labelsStr,')<\/text>'];
+    
+    % Search for the legend entries
+    idxList = regexp(text,pattern2);
+    idx_firstEntry = find(cellfun(@(x) ~isempty(x),idxList),1);
+    idx_lastEntry = find(cellfun(@(x) ~isempty(x),idxList),1,'last');
+    
+    if isempty(idx_firstEntry) || isempty(idx_lastEntry)
+        % warning(' - Plot2LaTeX.m: Legend element not found in the svg-file. No Text elements found!')
+        continue
+    end
+    
+    currLegendSize = Labels(idx_is_legend).Obj.Position;
+    newLegendSize = Labels(idx_is_legend).Position;
+    translateStr = sprintf('<g transform="translate(%f,0)">',newLegendSize(1)-currLegendSize(1) + (1-opts.legCorrFactor)*newLegendSize(3));
+    
+    legend_XPos = currLegendSize(1);
+    legend_YPos = height - currLegendSize(2);
+    legend_dim = newLegendSize(3:4);
+    legend_dim(1) = legend_dim(1)*opts.legCorrFactor;
+    newRectangleStr = sprintf('d="M%0.2f %0.2f L%0.2f %0.2f L%0.2f %0.2f L%0.2f %0.2f Z"',legend_XPos,legend_YPos,legend_XPos,legend_YPos-legend_dim(2),legend_XPos + legend_dim(1),legend_YPos-legend_dim(2),legend_XPos+legend_dim(1),legend_YPos);
+    pattern3 = 'd="M[0-9]+ [0-9]+ L[0-9]+ [0-9]+ L[0-9]+ [0-9]+ L[0-9]+ [0-9]+ Z"';
+    idxList = regexp(text,pattern3);
+    idx_legend_background = find(cellfun(@(x) ~isempty(x),idxList(1:idx_firstEntry-1)),1,'last');
+    idx_legend_trim = idx_lastEntry + find(cellfun(@(x) ~isempty(x),idxList(idx_lastEntry+1:end)),1,'first');
+    
+    text([idx_legend_background,idx_legend_trim]) = regexprep(text([idx_legend_background,idx_legend_trim]),pattern3,newRectangleStr);
+    
+    % Add Transform
+    text{idx_legend_background} = [translateStr,' ',text{idx_legend_background}];
+    pattern4 = '(<g style=.*?>)(.*)(<path .*?/>)(.*)</g>';
+    text{idx_legend_trim} = regexprep(text{idx_legend_trim},pattern4,'$1$2$3</g></g>$1$4</g>');
+end
 end
 
-if doShorten % Get Initial Text
-    text = getShortName();
-else
-    text = Labels(index).TrueText;
+%% ------------------------------------------------------------------------
+function textCell = parseSVG(file)
+% parseSVG(file, varargin)
+% parseSVG(file, 'opt1', value1, ...)
+%
+% Loads a svg file and redos the parsing with new linebreaks.
+% Every element gets its own line from start to finish. 
+
+%% Options
+opts.REGEXP_OpeningTag = '<[A-Za-z]+|<\?|<!--';
+opts.REGEXP_ClosingTag = '<\/[A-Za-z:]+>|\?>|-->|\/>';
+opts.REGEXP_ClosingTagWithSpace = '<\/[A-Za-z:]+ >';
+opts.MAX_LENGTH = 1000;
+
+%% Read SVG File
+textRaw = readLines_noLineBreak([file, '.svg']); % compatible with v2020a and older
+
+%% Fix closing Tags, that can have a whitespace inbetween
+% e.g. "</text >" to "</text>"
+[idx_errStart, idx_errEnd] = regexp(textRaw, opts.REGEXP_ClosingTagWithSpace);
+cntFixed = length(idx_errEnd);
+if ~isempty(idx_errStart)
+    textRaw(arrayfun(@(x) idx_errEnd(x)-1, 1:cntFixed)) = '';
 end
 
-if isfield(Labels, 'LabelText')
-    LabelList = {Labels(1:index-1).LabelText};
 
-    text = change_chars(text);
-    while ismember(text, LabelList) % Check if Label already exists
-        if doShorten
-            text = getShortName();
-        else
-            text = [text, '.'];
+%% Find Opening and Closing Tags
+openingTags = regexp(textRaw, opts.REGEXP_OpeningTag) - 1; % Get the last char that is not an openingTag
+[~, closingTags] = regexp(textRaw, opts.REGEXP_ClosingTag); % Get the last char that is a closingTag
+
+
+%% Init the Output
+textCell = cell(length(closingTags),1);
+line_idx = 1;
+
+%% Parse text
+TagList = [closingTags, openingTags];
+TagValue = [-ones(length(closingTags), 1); ones(length(openingTags), 1)]; %-1: Closing, +1: Opening
+[TagList, idxSort] = sort(TagList);
+TagValue = TagValue(idxSort);
+
+% find the right lineBreaks
+idx_Tags = 1;
+text_idx = 1;
+while true
+    idx_Tags_new = idx_Tags - 1 + find(cumsum(TagValue(idx_Tags:end)) <= 0, 1, 'first');
+    if isempty(idx_Tags_new)
+        idx_Tags_new = idx_Tags - 1 + find(TagList(idx_Tags:end)-text_idx+1 > opts.MAX_LENGTH, 1, 'first');
+    end
+
+    % Check for end
+    if text_idx > TagList(end)
+        if text_idx <= length(textRaw)
+            printLine(text_idx, length(textRaw));
         end
+        break;
+    end
+
+
+    % Check if line is too long
+    len_text_add = TagList(idx_Tags_new) - text_idx + 1;
+    if len_text_add > opts.MAX_LENGTH % Choose another tag to split
+        idx_Tags_new = idx_Tags - 1 + find(TagList(idx_Tags:end)-text_idx+1 > opts.MAX_LENGTH, 1, 'first');
+        len_text_add = TagList(idx_Tags_new) - text_idx + 1;
+    end
+
+    % Add new Line
+    printLine(text_idx, TagList(idx_Tags_new));
+
+    text_idx = text_idx + len_text_add;
+    idx_Tags = idx_Tags_new + 1;
+end
+
+%% Remove empty cells
+textCell(cellfun(@isempty, textCell)) = [];
+
+    function printLine(idx_start, idx_end)
+        idx_start_real = idx_start -1 + find(textRaw(idx_start:idx_end) ~= ' ',1,'first');
+        if isempty(idx_start_real)
+            idx_start_real = idx_start;
+        end
+        textCell{line_idx} = textRaw(idx_start_real:idx_end);
+        line_idx = line_idx +1;
     end
 end
-changed = ~strcmp(text, Labels(index).TrueText);
-Labels(index).LabelText = text;
 
-% Check if there is an entry in opts.replaceList
-if ~isempty(opts.ReplaceList) && ismember(Labels(index).TrueText, opts.ReplaceList(:, 1))
-    idx = strcmp(opts.ReplaceList(:, 1), Labels(index).TrueText);
-    Labels(index).TrueText = opts.ReplaceList{idx, 2};
-end
+%% ------------------------------------------------------------------------
+function text = readLines_noLineBreak(file)
+% text = readLines_noLineBreak(file)
+% 
+% Reads a file and creates a char with all lines in a row with whitespaces
+% before and after linebreak removed
+
+text = fileread(file);
+
+text = regexprep(text,'\r\n|\r|\n',' '); % replaces line breaks with a single space
+text = regexprep(text,'\s+',' '); % replaces multiple whitespaces with a single space
+
+text(1:find(text ~= ' ',1,'first')-1) = ''; % Remove white spaces at the start
+text(find(text ~= ' ',1,'last')+1:end) = ''; % Remove white spaces at the end
 end
 
+%% ------------------------------------------------------------------------
+function [LabelElement,changed] = getShortName(LabelElement,mode,reset)
+
+changed = false;
+disallowedChars = '\\'; % Backslash-char cant be converted by matlab 
+
+if nargin == 2
+    reset = false;
+end
+
+persistent cellElement idx list idx2 list2
+if isempty(cellElement) || reset
+    cellElement = {0};
+    idx = 1;
+    list = {};
+    idx2 = 1;
+    list2 = {'.',';','''','^'};
+end
+if reset 
+    return
+end
+
+names = LabelElement.TrueText;
+dim = length(names);
+
+text = cell(1,dim);
+for i = 1:dim
+    if ~isempty(regexp(names{i},disallowedChars, 'once'))
+        names{i} = regexprep(names{i},disallowedChars,'.');
+        changed = true;
+    end
+    switch mode
+        case 0 % normal
+            while ismember(names{i},list) % add a "."/","/...
+                newElementAdded = false;
+                for i2 = 1:length(list2)
+                    if ~ismember([names{i},list2{i2}],list) % add a "."
+                        names{i} = [names{i},list2{i2}];
+                        newElementAdded = true;
+                        changed = true;
+                        break;
+                    end
+                end
+                if ~newElementAdded
+                    names{i} = [names{i},list2{idx2}];
+                    idx2 = mod(idx2 +1,length(list2));
+                    changed = true;
+                end
+            end
+            text{i} = names{i};
+        case 1 % shorten
+            celllen = length(cellElement);
+            if cellElement{idx} == 26 && idx == celllen % Add new Char
+                idx = 1;
+                cellElement = num2cell(ones(1, celllen+1));
+            elseif cellElement{idx} == 26 % increment the char at postion idx
+                idx = idx + 1;
+                cellElement{idx} = cellElement{idx} + 1;
+            else
+                cellElement{idx} = cellElement{idx} + 1;
+            end
+
+            elements = cell2mat(cellElement) - 1;
+            text{i} = char(char('a')+elements);
+            changed = true;
+        case 2 % add length to the end
+            text{i} = [names{i},'..'];
+            changed = true;
+        case 3 % Axis with an Exponent 
+            suffix = '';
+            origFormat = LabelElement.Obj.TickLabelFormat;
+            doChange = any(ismember(LabelElement.Obj.TickLabels, list));
+            while doChange
+                suffix = [suffix, '.']; %#ok<AGROW>
+                LabelElement.Obj.TickLabelFormat = [origFormat, suffix];
+                doChange = any(ismember(LabelElement.Obj.TickLabels, list));
+            end
+            text = erv(LabelElement.Obj.TickLabels);
+            break
+    end
+end
+LabelElement.LabelText = text;
+list = [list,text];
+end
 
 %% ------------------------------------------------------------------------
 function ChangeInterpreter(h, Interpreter)
@@ -775,42 +976,41 @@ if ~isempty(Interpreter)
 end
 end
 
-
 %% ------------------------------------------------------------------------
-function strXML = EscapeXML(str)
-% ESCAPEXML repaces special characters(<,>,',",&) -> (&lt;,&gt;,&apos;,&quot;,&amp;)
-escChar = {'&', '<', '>', '''', '"'};
-repChar = {'&amp;', '&lt;', '&gt;', '&apos;', '&quot;'};
-strXML = regexprep(str, escChar, repChar);
+function text = Text2LaTeX(Label, opts)
+% Text2LaTeX repaces special characters(<,>,',",&) -> (&lt;,&gt;,&apos;,&quot;,&amp;)
+dim = length(Label.TrueText);
+text = cell(1,dim);
+for idx = 1:dim
+    if ismember(opts.ReplaceList(:,1),Label.TrueText{idx})
+        Label.TrueText{idx} = opts.ReplaceList{find(ismember(opts.ReplaceList(:,1),Label.TrueText{idx}),1),2};
+    end
+    escChar = {'&', '<', '>', '''', '"'};
+    repChar = {'&amp;', '&lt;', '&gt;', '&apos;', '&quot;'};
+    text{idx} = regexprep(Label.TrueText{idx}, escChar, repChar);
+    color = [Label.Color{:}];
+    if ~isempty(Label.Color) && any(color ~= [0,0,0]) && any(color ~= 0.15)
+        text{idx} = ['{\definecolor{col}{rgb}{',num2str(color(1)),',',num2str(color(2)),',',num2str(color(3)),'} \color{col}',text{idx},'}'];
+    end
+    if strcmp(opts.FontSizeMode,'fixed') && ~isempty(opts.FontSize) && ~isempty(Label.FontSize) && opts.FontSize ~= Label.FontSize{1}
+        text{idx} = ['{\fontsize{',num2str(Label.FontSize{1}),'}{',num2str(Label.FontSize{1}*1.2),'}\selectfont ',text{idx},'}'];
+    end
+    text{idx} = regexprep(text{idx},'\\','\\\\');
+end
 end
 
-
 %% ------------------------------------------------------------------------
-function str = change_chars(str)
-% \"U -> U, etc.
-escChar = {char(228), char(246), char(228), char(228), char(228), char(228)};
-repChar = {'a', 'o', 'u', 'A', 'O', 'U'};
-str = regexprep(str, escChar, repChar);
-end
-
-
-%% ------------------------------------------------------------------------
-function [fig] = copy_Figure(fig_orig)
+function fig = copy_Figure(fig_orig)
 % this program copies a figure
 
 Name = 'Plot2LaTeX';
-figurefile = fullfile(pwd, [Name, '.fig']);
-savefig(fig_orig, figurefile)
+fig = figure('Name',Name);
+ax_children = fig_orig.Children;
+copyobj(ax_children,fig)
 
-fig = openfig(figurefile);
-fig.Name = Name;
-set(fig, 'Units', get(fig_orig, 'Units'));
-set(fig, 'position', get(fig_orig, 'position'));
-drawnow()
-warning('on')
-delete(figurefile)
+properties = {'Units','position','Color','Colormap','Alphamap'};
+set(fig, properties, get(fig_orig, properties)); 
 end
-
 
 %% ------------------------------------------------------------------------
 function options = checkOptions(options, inputArgs, doWarning)
@@ -819,7 +1019,6 @@ function options = checkOptions(options, inputArgs, doWarning)
 % options: struct with valid fields
 % inputargs: a cell of inputs -> varargin of a higher function or a cell of a struct
 % doWarning: true (default), false
-%
 
 if nargin == 2
     doWarning = true;
@@ -856,7 +1055,6 @@ for ii = 1:2:length(inputArgs)
 end
 end
 
-
 %% ------------------------------------------------------------------------
 function [bool, validEntry] = isValidEntry(validEntries, input, fcnName, doWarning)
 % allow input of an options structure that overwrites existing fieldnames with its own, for increased flexibility
@@ -888,7 +1086,6 @@ elseif doWarning && ~isstruct(input) && ischar(input)
 end
 end
 
-
 %% ------------------------------------------------------------------------
 function isValid = check_Inkscape_Dir(inkscape_path)
 % isValid = CHECK_INKSCAPE_DIR(path) checks if the path to inkscape is
@@ -899,7 +1096,6 @@ if status ~= 0 && status ~= 1
     warning([' - check_Inkscape_Dir.m: system(''', inkscape_path, ' --help'') was not successful. System response was ', num2str(status), '.'])
 end
 end
-
 
 %% ------------------------------------------------------------------------
 function [isAboveV1, version] = check_Inkscape_Version(inkscape_path)
@@ -920,38 +1116,9 @@ else
 end
 end
 
-
 %% ------------------------------------------------------------------------
-function text = getShortName(reset)
-
-if nargin == 0
-    reset = false;
-end
-
-
-persistent cellElement idx
-if isempty(cellElement) || reset
-    cellElement = {0};
-    idx = 1;
-end
-
-if ~reset
-    celllen = length(cellElement);
-    if cellElement{idx} == 26 && idx == celllen % Add new Char
-        idx = 1;
-        cellElement = num2cell(ones(1, celllen+1));
-    elseif cellElement{idx} == 26 % increment the char at postion idx
-        idx = idx + 1;
-        cellElement{idx} = cellElement{idx} + 1;
-    else
-        cellElement{idx} = cellElement{idx} + 1;
-    end
-
-    elements = cell2mat(cellElement) - 1;
-    text = char(char('a')+elements);
-else
-    text = [];
-end
+function dataOut = erv( data )
+dataOut = reshape(data, [1 numel(data)]);
 end
 
 % Change log (end of File):
@@ -997,3 +1164,10 @@ end
 %   - option 'waitbar' to 'Verbose' changed
 % v 1.10 - 13/01/2023
 %   - Removes the white background of a figure, thanks to M.Zimmer
+% v 2.00 - 27/05/2023
+%   - Full Overhaul, speed up of up to 50%
+%   - yline (horizontal position) fixed 
+%   - Color Text and different fontSizes ('fixed' new option) now possible
+%   - Fixed the export of figures that had previously the warning "No text
+%     elements found."
+%   - Speed up of copy_figure.m

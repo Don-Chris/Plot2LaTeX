@@ -982,7 +982,7 @@ function text = Text2LaTeX(Label, opts)
 dim = length(Label.TrueText);
 text = cell(1,dim);
 for idx = 1:dim
-    if ismember(opts.ReplaceList(:,1),Label.TrueText{idx})
+    if ~isempty(opts.ReplaceList) && ismember(opts.ReplaceList(:,1),Label.TrueText{idx})
         Label.TrueText{idx} = opts.ReplaceList{find(ismember(opts.ReplaceList(:,1),Label.TrueText{idx}),1),2};
     end
     escChar = {'&', '<', '>', '''', '"'};
@@ -1171,3 +1171,5 @@ end
 %   - Fixed the export of figures that had previously the warning "No text
 %     elements found."
 %   - Speed up of copy_figure.m
+% v 2.1 - 01/06/2023
+%   - fixed a bug with opts.replaceList

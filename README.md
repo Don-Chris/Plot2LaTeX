@@ -17,15 +17,16 @@ and Inkscape v1.1.1
 # Options
 **PLOT2LATEX(h, filename, 'option1', value, 'option2', value, ...)** or **PLOT2LATEX(h, filename, options_struct)** saves figure with specified options. 
 - 'Renderer':'painters' (default), 'opengl', ''(no change)
-- 'yCorrFactor':     0.8 (default, in px)
-- 'DIR_INKSCAPE':    directory to inkscape.exe
-- 'Verbose':         ['console' (default), 'waitbar', 'both', false], Should a waitbar appear to show progress or a console text
-- 'useOrigFigure'    false (default, Use the original figure or create a copy?)
-- 'OnlySVG':         false (default), Option to stop after creating the svg file. Can be used, if the plots are used as svg files or if inkscape is not installed.
-- 'Interpreter':     'tex' (default, 'latex','none'), changes the matlab text interpreter
-- 'FontSize':        11 (default, in pt), should be equal to the font size inside of the document, use '' if the font size should not be changed before hand.
-- 'ReplaceList':     ['' (default), a cell with 2 columns, first column: text in figure, second column: new text in .svg], Should a placeholder text in the figure be  replaced with a LaTeX command that e.g. matlab can't correctly display? example : {'placeholder','\acr{thickness}'; 'placeholder2','$\exp{-4r^2}$'}
-- 'Inkscape_Export_Mode': ['export-area-page' (default), 'export-area', 'export-area-drawing', 'export-use-hints'], inkscape export options, see wiki.inkscape.org
+- 'yCorrFactor': 0.8 (default, in px)
+- 'legCorrFactor': 1.02 (default in Percent): Option for manually correct the horizontal size of a (vertical) legend.
+- 'DIR_INKSCAPE': directory to inkscape.exe
+- 'Verbose': 'console' (default), 'waitbar', 'both', boolean: Should a waitbar appear to show progress or a console text
+- 'useOrigFigure': false (default): Use the original figure or create a copy?
+- 'OnlySVG': false (default): Option to stop after creating the svg file. Can be used, if the plots are used as svg files or if inkscape is not installed.
+- 'Interpreter': 'tex' (default), 'latex','none': Changes the matlab text interpreter
+- 'FontSize': auto (default), '', 'fixed', 14 (in pt): Should be equal to the font size inside of the document, use '' if the font size should not be changed before hand.
+- 'ReplaceList': '' (default), a cell with 2 columns, first column: text in figure, second column: new text in .svg: Should a placeholder text in the figure be  replaced with a LaTeX command that e.g. matlab can't correctly display? example : {'placeholder','\acr{thickness}'; 'placeholder2','$\exp{-4r^2}$'}
+- 'Inkscape_Export_Mode': 'export-area-page' (default), 'export-area', 'export-area-drawing', 'export-use-hints': inkscape export options, see wiki.inkscape.org
 
 # Example function calls:
 - **PLOT2LATEX(gcf, 'FirstPlot')**
@@ -61,18 +62,15 @@ The y-offset of all text can be modified using yCorrFactor. The default is 'yCor
 - [x] Supports real transparency.
 - [x] SVG is a better supported, maintained and editable format than eps
 - [x] SVG allows simple manual modification into Inkscape.
+- [x] PLOT2LATEX sets all text to the same size, based on the median of all text sizes present with option "fontSize"="auto". Use "FontSize"="fixed" for variing text sizes in LaTeX.
 
 # Limitations:
 - [ ] Text resize is still done in PLOT2LATEX. The LaTeX fonts in matlab do not correspond completely with the LaTeX font size.
-- [ ] Legend size is not always correct, use \hspace or \vspace in matlab legend to achieve a nicer fit. Requires some iterations.
-- [ ] Rotating 3D images using toolbar does not work, using view([]) works.
-- [ ] Text boxes with LaTeX code which is not interpretable by matlab results in too long text boxes.
+- [ ] Legend size is not always correct, use placeholder text elements that will be replaced based on the replaceList-option. Works with latex-functions that can't be compiled by matlab.
+- [ ] Text boxes with LaTeX code which is not interpretable by matlab results in too long text boxes. Use the replaceList-option.
 - [ ] Very large figures sometimes result in very large waiting times.
 - [ ] Older versions than matlab 2014b are not supported.
 - [ ] PLOT2LATEX currently does not work with titles consisting of multiple lines.
-- [ ] PLOT2LATEX does not work with annotation textbox objects.
-- [ ] PLOT2LATEX does not support colored text.
-- [ ] PLOT2LATEX currently exports all text to the same size (the text size inside of the document).
 
 
 # Trouble shooting
@@ -84,9 +82,7 @@ to something similar as setenv('DYLD_LIBRARY_PATH','/usr/local/bin/').
 The bash profile location can be found by using '/usr/bin/env bash'
 
 # To do:
-- [ ] Annotation textbox objects
 - [ ] Allow multiple line text
-- [ ] Use findall(h,'-property','String')
 - [ ] Speed up code by smarter string replacement of SVG file
 - [ ] Resize of legend box using: [h,icons,plots,str] = legend(); (not so simple)
 - [ ] Size difference .svg and .fig if specifying units other than px. (Matlab limitation?)

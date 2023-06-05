@@ -307,7 +307,7 @@ end
 
 
 %% ---------------- test if inkscape installation is correct --------------
-if check_INKSCAPE_Installation
+if ~opts.OnlySVG && check_INKSCAPE_Installation
     inkscape_valid = check_Inkscape_Dir(opts.DIR_INKSCAPE);
     if ~inkscape_valid && ~opts.OnlySVG
         if opts.Verbose(2)

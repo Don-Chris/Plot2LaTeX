@@ -118,10 +118,11 @@ function Plot2LaTeX(h_in, filename, varargin)
 %
 % Limitation:
 % - Text resize is still done in PLOT2LATEX. The LaTeX fonts in matlab do
-%   not correspond completely with the LaTeX font size.
+%   not correspond completely with the LaTeX font size or can't be correcty
+%   exported. 
 % - Text boxes with LaTeX code which is not interpretable by matlab
 %   results in too long text boxes. Use a placeholder text with the option
-%   'ReplaceList' instead (the placeholder should have the right length).
+%   'ReplaceList' instead (the placeholder needs to have the right length).
 % - Very large figures sometimes result in very large waiting times.
 % - Older versions than matlab 2014b are not supported.
 % - PLOT2LATEX currently does not work with titles consisting of multiple
@@ -135,7 +136,7 @@ function Plot2LaTeX(h_in, filename, varargin)
 % - Size difference .svg and .fig if specifying units other than px.
 %     (Matlab limitation?)
 %
-% Version:  1.3 / 1.4 / 1.5 / 1.6/ 1.7/ 1.8/ 1.9/ 2.0
+% Version:  1.3 - 1.9/ 2.0 - current
 %   Author:    C. Schulte
 %   Date:     27.05.2023
 %   Contact:  C.Schulte@irt.rwth-aachen.de
@@ -144,7 +145,7 @@ function Plot2LaTeX(h_in, filename, varargin)
 %   Author:    M. Zimmer
 %   Date:     13.01.2023
 %
-% Version:  1.2
+% Version:  1.0 - 1.2
 %   Author:    J.J. de Jong, K.G.P. Folkersma
 %   Date:     20/04/2016
 %   Contact:  j.j.dejong@utwente.nl
@@ -380,12 +381,13 @@ for i = 1:length(ConstLineObj) % Constant line objects
 end
 for i = 1:length(AxeObj) %do similar for axes objects, XTick, YTick, ZTick
     % Y-Axis
-    if strcmp(AxeObj(i).YAxisLocation, 'right') % exeption for yy-plot, aligment is left for the right axis
-        type = 'YYAxis';
+    if numel(AxeObj(i).YAxis) == 2 % exeption for yy-plot, aligment is left for the right axis
+        Labels = addElement(AxeObj(i).YAxis(1),'YAxis',Labels);
+        Labels = addElement(AxeObj(i).YAxis(2),'YYAxis',Labels);
     else % normal y labels
         type = 'YAxis';
+        Labels = addElement(AxeObj(i).YAxis(1),type,Labels);
     end
-    Labels = addElement(AxeObj(i).YAxis,type,Labels);
 end
 for i = 1:length(AxeObj) %do similar for axes objects, XTick, YTick, ZTick
     % Z-Axis
@@ -445,7 +447,7 @@ end
 try
     updateSVG(filename, Labels, opts)
 catch
-    warning(' - Plot2LaTeX.m: Could not update the svg. No permission?')
+    warning(' - Plot2LaTeX.m: Could not update the svg. No file permission?')
     fclose('all');
 end
 
@@ -711,7 +713,7 @@ for line_idx = 1:length(text)
 end
 fclose(fout);
 if nFoundLabel == 0
-    warning(' - Plot2LaTeX.m: No text elements found and updated. Please check if no text is used or if the Renderer is "painters" and if there are any characters present that can''t be correctly printed to text.')
+    warning(' - Plot2LaTeX.m: No text elements found and updated in the svg-file from "saveas.m". Please check if the Renderer is "painters" and if there are any characters or fonts present that can''t be correctly printed to text with matlab.')
 end
 end
 
@@ -1002,16 +1004,26 @@ end
 %% ------------------------------------------------------------------------
 function fig = copy_Figure(fig_orig)
 % this program copies a figure
-
 Name = 'Plot2LaTeX';
 fig = figure('Name',Name);
-ax_children = fig_orig.Children;
-copyobj(ax_children,fig)
+try
+    ax_children = fig_orig.Children;
+    copyobj(ax_children,fig)
 
-properties = {'Units','position','Color','Colormap','Alphamap'};
-set(fig, properties, get(fig_orig, properties)); 
+    properties = {'Units','position','Color','Colormap','Alphamap'};
+    set(fig, properties, get(fig_orig, properties)); 
+catch
+    close(fig)
+    figurefile = fullfile(pwd, [Name, '.fig']);
+    savefig(fig_orig, figurefile)
+    fig = openfig(figurefile);
+    fig.Name = Name;
+    set(fig, 'Units', get(fig_orig, 'Units'));
+    set(fig, 'position', get(fig_orig, 'position'));
+    drawnow()
+    delete(figurefile)
 end
-
+end
 %% ------------------------------------------------------------------------
 function options = checkOptions(options, inputArgs, doWarning)
 % options = checkOptions(options, inputArgs, doWarning)
@@ -1173,3 +1185,6 @@ end
 %   - Speed up of copy_figure.m
 % v 2.1 - 01/06/2023
 %   - fixed a bug with opts.replaceList
+% v 2.2 - 22/06/2023
+%   - fixed a bug with YY-Axis
+%   - changed warning messages

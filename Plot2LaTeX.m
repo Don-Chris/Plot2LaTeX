@@ -511,7 +511,7 @@ if isempty(list)
         'Alignment', PosAligmentSVG{2},...
         'Anchor', PosAnchSVG{1},...
         'setLabel',{@(obj,label) @(label) set(obj,'String',label)},...
-        'Position',@(obj) obj.Position,'Obj',@(obj) obj,'mode', @(obj) strcmp(obj.Orientation,'horizontal')+1,'XMLText','');
+        'Position',@(obj) [obj.Position,obj.Parent.Position(4)],'Obj',@(obj) obj,'mode', @(obj) strcmp(obj.Orientation,'horizontal')+1,'XMLText','');
     
     % ColorBar Elements
     list(3) = struct('type','ColorBar','TrueText',@(obj) erv(obj.TickLabels),...
@@ -719,7 +719,7 @@ end
 
 %% ------------------------------------------------------------------------
 function text = checkForLegend(text, Labels, opts)
-isLegend = arrayfun(@(x)strcmp(x.type,'Legend')&& x.mode == 1,Labels);
+isLegend = arrayfun(@(x)strcmp(x.type,'Legend')&& x.mode == 1,Labels); % check if horizontal
 
 % getSVGSize:
 pattern1 = '<rect x="0" width="([0-9]+)" height="([0-9]+)" y="0"';
@@ -741,8 +741,10 @@ for idx_is_legend = find(isLegend)
         continue
     end
     
-    currLegendSize = Labels(idx_is_legend).Obj.Position;
-    newLegendSize = Labels(idx_is_legend).Position;
+    % Moving of the figure to the right based on opts.legCorrFactor
+    factor = height/Labels(idx_is_legend).Position(5);
+    currLegendSize = Labels(idx_is_legend).Obj.Position*factor;
+    newLegendSize = Labels(idx_is_legend).Position(1:4)*factor;
     translateStr = sprintf('<g transform="translate(%f,0)">',newLegendSize(1)-currLegendSize(1) + (1-opts.legCorrFactor)*newLegendSize(3));
     
     legend_XPos = currLegendSize(1);
@@ -1188,3 +1190,4 @@ end
 % v 2.2 - 22/06/2023
 %   - fixed a bug with YY-Axis
 %   - changed warning messages
+%   - minor fix for svg-export scaling factor

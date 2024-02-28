@@ -1163,9 +1163,9 @@ function output = to_cell( input, isText)
 if nargin == 1
     isText = false;
 end
-if iscell(input) && iscell(input{1})
+if iscell(input) && ~isempty(input) && iscell(input{1})
     output = erv(input);
-elseif iscell(input) && ~iscell(input{1})
+elseif iscell(input) && (isempty(input) || ~iscell(input{1}))
     output = {erv(input)};
 else
     output = {{input}};
@@ -1236,3 +1236,5 @@ end
 %   - fixed a bug with multiple elements in replaceList, thanks to Stefanski89
 %   - readded the feature "removal of white background", it was exidently removed in v2.0
 %   - added multiple line support for text like titles and axis
+% v 2.3.1 - 28/02/2024
+%   - fixed a bug that results in an error if an invisible axis has no Labels, thanks to Stefanski89

@@ -1,0 +1,62 @@
+name: unit_test
+
+on:
+  push:
+    branches:
+      - unit_test  # Adjust branch name as needed
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      
+    - name: Set up MATLAB
+      uses: mathworks/setup-matlab@v0
+      with:
+        matlab-version: R2023b 
+        
+    - name: Run tests
+      run: matlab -batch "cd Tests; run_all_tests;"
+      
+    - name: Archive test results
+      uses: actions/upload-artifact@v2
+      with:
+        - name: unit_test_1
+          path: test1/test1_latex.svg
+        - name: unit_test_2
+          path: test2/test2_latex.svg
+        - name: unit_test_3
+          path: test3/test3_latex.svg
+        - name: unit_test_4
+          path: test4/test4_latex.svg
+        - name: unit_test_5
+          path: test5/test5_latex.svg
+        - name: unit_test_6
+          path: test6/test6_latex.svg
+        - name: unit_test_7
+          path: test7/test7_latex.svg      
+  build_pdf:
+    needs: test
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      
+    - name: Install LaTeX
+      run: sudo apt-get install -y texlive-latex-base texlive-fonts-recommended texlive-fonts-extra texlive-latex-extra
+      
+    - name: Download test results
+      uses: actions/download-artifact@v2
+      with:
+        name: unit_test_1
+        path: unit_test/test1
+        
+    - name: Build PDF
+      run: |
+        # Your commands to generate PDF using latexmk
+        # For example:
+        latexmk -pdf -output-directory=unit_test/test1 unit_test/test1/test1.tex

@@ -29,15 +29,16 @@ Tested with Matlab 2016b-2020b on Microsoft Windows and Inkscape v1.*.
 | Option | Value | Discription |
 | --- | --- | --- |
 | `'Renderer'` | 'painters' (default), 'opengl', '' (no change)| Renderer of the figure. Only change if you know what you are doing.|
-| `'yCorrFactor'`| 0.8 (default, in px)| Offset of all text in y-direction.|
-| `'legCorrFactor'`| 1.02 (default, in percent)| Option for manually correct the horizontal size of a (vertical) legend.|
+| `'yCorrFactor'`| 0 (default, in px)| Offset of most text elements in y-direction.|
+| `'legendPadding'`| [1,1,1,1] (default, in pt)| Option for manually add padding to the legends [top, bottom, left, right], only works for legends with vertical orientation.|
 | `'DIR_INKSCAPE'`| 'inkscape' (default), 'C:\Program Files\Inkscape\Inkscape.exe', ... |Path to inkscape.exe|
 | `'Verbose'`| 'console' (default), 'waitbar', 'both'| Should a waitbar appear to show progress or a console text|
 | `'useOrigFigure'`| false (default)| Use the original figure or create a copy?|
 | `'OnlySVG'`| false (default)| Option to stop after creating the SVG file. Can be used, if the plots are used as SVG files with the package SVG in LaTeX or if inkscape is not installed.|
 | `'Interpreter'`| '' (default), 'latex', 'none', tex'| Changes the matlab text interpreter, if empty no change is made.|
-| `'FontSize'`| 'auto' (default), ' ' (do nothing), 'fixed', 14 (in pt)|Should be equal to the font size inside the document, use '' if the font size should not be changed beforehand.|
+| `'FontSize'`| 'auto' (default), ' ' (do nothing), 'fixed', 14 (in pt)|Should be equal to the font size inside the document, use '' if the font size should not be changed beforehand. 'fixed': all font sizes will be preset with \fontsize in latex. 'auto': the prevalent fontsize will be found and all text elements will be changed to this fontsize.|
 | `'ReplaceList'`| '' (default), a cell with 2 columns|first column: text in figure, second column: new text in .svg: Should a placeholder text in the figure be replaced with a LaTeX command that e.g. matlab can't correctly display? Example : {'placeholder','\acr{thickness}'; 'placeholder2','$\exp{-4r^2}$'}|
+| `'SquishedText'`| false (default)| Option to horizontal squish all text elements in the svg-file, so that the export mode of inkscape works better with commands that go outside the drawing area.|
 | `'Inkscape_Export_Mode'`| 'export-area-page' (default), 'export-area-drawing'| inkscape export options, see wiki.inkscape.org|
 | `'RemoveWhiteBackground'`| true (default)| Should the white background of the figure be removed from the SVG file?|
 
@@ -97,6 +98,5 @@ The bash profile location can be found by using '/usr/bin/env bash'
 ## To do
 
 - [ ] Allow multiple line text
-- [ ] Speed up code by smarter string replacement of SVG file
 - [ ] Resize of legend box using: [h,icons,plots,str] = legend(); (not so simple)
 - [ ] Size difference .svg and .fig if specifying units other than px. (Matlab limitation?)

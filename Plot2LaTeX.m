@@ -11,12 +11,13 @@ function Plot2LaTeX(h_in, filename, varargin)
 %                        Should the 'Renderers' Option of the plot be
 %                        changed? 'painters' is important for vector
 %                        graphics
-%   'yCorrFactor':     0.33 (default, in percent)
+%   'yCorrFactor':     0 (default, in percent)
 %                        Option for manually correcting the y position of
 %                        some text elements inside of the svg-file.
-%   'legCorrFactor':   1.02 (default, in percent so 102%)
-%                        Option for manually correct the horizontal size of
-%                        a legend entry.
+%   'legendPadding':   [1,1,1,1] (default, in pt)
+%                        Option for manually add padding to the legends
+%                        [top, bottom, left, right], only works for legends
+%                        with vertical orientation
 %   'DIR_INKSCAPE':    'inkscape.exe' (default), 'C:/Program Files/
 %                      Inkscape/bin/inkscape.exe'
 %                        directory to the inkscape.exe that is used inside
@@ -51,6 +52,11 @@ function Plot2LaTeX(h_in, filename, varargin)
 %                        can't correctly display?
 %                        example : {'placeholder','\acr{thickness}';
 %                                   'placeholder2','$\exp{-4r^2}$'}
+%   'SquishedText'     false (default)
+%                        Option to horizontal squish all text elements in 
+%                        the svg-file, so that the export mode of inkscape
+%                        works better with commands that go outside the
+%                        drawing area.
 %   'Inkscape_Export_Mode': 'export-area-drawing' (default), 'export-area-page'
 %                        inkscape export options, see wiki.inkscape.org
 %   'RemoveWhiteBackground': true (default)
@@ -125,7 +131,8 @@ function Plot2LaTeX(h_in, filename, varargin)
 %   exported. 
 % - Text boxes with LaTeX code which is not interpretable by matlab
 %   results in too long text boxes. Use a placeholder text with the option
-%   'ReplaceList' instead (the placeholder needs to have the right length).
+%   'ReplaceList' instead (the placeholder needs to have the right length in
+%   most cases to work properly).
 % - Very large figures sometimes result in very large waiting times.
 % - Older versions than matlab 2014b are not supported.
 % - PLOT2LATEX currently does not work with titles consisting of multiple
@@ -167,10 +174,10 @@ else
 end
 
 % yCorrFactor = [any number]: correcting the y position of some text elements
-opts.yCorrFactor = 0.33;
+opts.yCorrFactor = 0;
 
-% legCorrFactor = [any number]: correcting the legend horizontal size in percent
-opts.legCorrFactor = 1.02;
+% legCorrValues = [any number in pt]: Padding top, bottom, left, right
+opts.legendPadding = [0,0,0,0]; 
 
 % useOrigFigure = [false, true] : should the original figure be used or copied?
 opts.useOrigFigure = false;
@@ -197,6 +204,15 @@ opts.OnlySVG = false;
 %                         'export-area-page']
 %                      : See https://wiki.inkscape.org/wiki/Using_the_Command_Line
 opts.Inkscape_Export_Mode = 'export-area-drawing';
+
+% SquishedText = [false, true]
+%                Should the text be horizontal squished? This would result 
+%                in a reduced width if the svg would be opened, however 
+%                in latex no direct change should be seen. This is helpful
+%                when text is going outside of the svg-boundaries and would
+%                result in white spaces in latex.
+opts.SquishedText = false;
+opts.SquishFactor = 0.1;
 
 % Interpreter = ['','tex','latex','none'] : matlab text interpreter option
 %                                           '' -> dont change
@@ -349,18 +365,16 @@ AxeObj = findall(h, 'Type', 'Axes'); % axes containing x y z ticklabel
 ColObj = findall(h, 'Type', 'Colorbar'); % containg color bar tick
 ConstLineObj = findall(h, 'Type', 'ConstantLine');
 
-PosAnchSVG = {'start', 'middle', 'end'};
-PosAligmentSVG = {'start', 'center', 'end'};
-
 ChangeInterpreter(h, opts.Interpreter) % Change Interpreter if specified
 h.PaperPositionMode = 'auto'; % Keep current size
-getShortName('','',true); % reset the persistent variable
+getShortName('','',true); % add to buffer and reset the persistent variable
 
 
 %% ---------------- Replace text with a label -----------------------------
 Labels = struct('type','','TrueText','','FontSize','','Color','','Alignment','',...
-    'Anchor','','setLabel','','Position','','Obj','','mode','','LabelText','','XMLText','');
+    'Anchor','','setLabel','','Position','','Obj','','mode','','LabelText','','XMLText','','Found','');
 Labels(1) = [];
+
 
 if opts.Verbose(1)
     Step = Step + 1;
@@ -390,32 +404,26 @@ end
 for i = 1:length(AxeObj) %do similar for axes objects, XTick, YTick, ZTick
     % Y-Axis
     if numel(AxeObj(i).YAxis) == 2 % exeption for yy-plot, aligment is left for the right axis
-        Labels = addElement(AxeObj(i).YAxis(1),'YAxis',Labels);
+        Labels = updateAxis(AxeObj(i).YAxis(2),'YYAxis',Labels); % add exponent, etc.
         Labels = addElement(AxeObj(i).YAxis(2),'YYAxis',Labels);
-    else % normal y labels
-        type = 'YAxis';
-        Labels = addElement(AxeObj(i).YAxis(1),type,Labels);
     end
+    Labels = updateAxis(AxeObj(i).YAxis(1),'YAxis',Labels); % add exponent, etc.
+    Labels = addElement(AxeObj(i).YAxis(1),'YAxis',Labels);
 end
 for i = 1:length(AxeObj) %do similar for axes objects, XTick, YTick, ZTick
     % Z-Axis
+    Labels = updateAxis(AxeObj(i).ZAxis,'ZAxis', Labels); % add exponent, etc.
     Labels = addElement(AxeObj(i).ZAxis,'ZAxis', Labels);
 end
 for i = 1:length(AxeObj) %do similar for axes objects, XTick, YTick, ZTick
     % X-Axis
+    Labels = updateAxis(AxeObj(i).XAxis,'XAxis', Labels); % add exponent, etc.
     Labels = addElement(AxeObj(i).XAxis,'XAxis', Labels);
 end
 
-% Support for exponential expression
-% original figure: x10^exponent, in exported svg-file: #10^exponent
-% replace # with x:
-i = length(Labels)+1;
-Labels(i).LabelText = {'#'};
-Labels(i).TrueText = {'$\times$'};
-Labels(i).Alignment = PosAligmentSVG{1};
-Labels(i).Anchor = PosAnchSVG{1};
-Labels(i).Color = [0,0,0];
-Labels(i).type = 'None';
+% Set Fontsize of exponents
+Labels(1).FontSize =median([Labels.FontSize]);
+Labels(2).FontSize = Labels(1).FontSize;
 
 % Create the XML Text for each element
 nLabel = length(Labels);
@@ -452,12 +460,12 @@ if opts.Verbose(2)
     disp(' - Plot2LaTeX.m: Restoring text in .svg file.')
 end
 
- try
+% try
     updateSVG(filename, Labels, opts)
- catch
-    warning(' - Plot2LaTeX.m: Could not update the svg. No file permission?')
-    fclose('all');
- end
+% catch
+%     warning(' - Plot2LaTeX.m: Could not update the svg. No file permission?')
+%     fclose('all');
+% end
 
 
 %% ---------------- Invoke Inkscape to generate PDF + PDF_TeX -------------
@@ -511,7 +519,8 @@ if isempty(list)
         'Alignment',PosAligmentSVG{4},...
         'Anchor',PosAnchSVG{4},...
         'setLabel',@(obj,label) @(label) set(obj,'String',label),...
-        'Position',@(obj) '','Obj',@(obj) obj,'mode', 0,'XMLText','');
+        'Position',@(obj) '','Obj',@(obj) obj,'mode', 0,'XMLText','',...
+        'Found',@(obj) isempty(obj.String));
     
     % Legend Elements
     list(2) = struct('type','Legend','TrueText',@(obj) to_cell(obj.String,true),...
@@ -519,7 +528,9 @@ if isempty(list)
         'Alignment', PosAligmentSVG{2},...
         'Anchor', PosAnchSVG{1},...
         'setLabel',{@(obj,label) @(label) set(obj,'String',label)},...
-        'Position',@(obj) [obj.Position,obj.Parent.Position(4)],'Obj',@(obj) obj,'mode', @(obj) strcmp(obj.Orientation,'horizontal')+1,'XMLText','');
+        'Position',@(obj) [obj.Position,obj.Parent.Position(4)],'Obj',@(obj) obj,...
+        'mode', @(obj) strcmp(obj.Orientation,'horizontal')+1,'XMLText','',...
+        'Found',@(obj) isempty(obj.String));
     
     % ColorBar Elements
     list(3) = struct('type','ColorBar','TrueText',@(obj) to_cell(obj.TickLabels,true),...
@@ -527,7 +538,8 @@ if isempty(list)
         'Alignment',@(obj) getAlignmentColorBar(obj),...
         'Anchor',@(obj) getAnchorColorBar(obj),...
         'setLabel',{@(obj,label) @(label) set(obj,'TickLabels',label)},...
-        'Position',@(obj) '','Obj',@(obj) obj,'mode', 0,'XMLText','');
+        'Position',@(obj) '','Obj',@(obj) obj,'mode', 0,'XMLText','',...
+        'Found',@(obj) isempty(obj.TickLabels));
     
     % Constant Line Elements
     list(4) = struct('type','ConstantLine','TrueText',@(obj) to_cell(obj.Label,true),...
@@ -535,7 +547,8 @@ if isempty(list)
         'Alignment',@(obj) getAlignmentConstantLine(obj), ...
         'Anchor',@(obj) getAnchorConstantLine(obj),...
         'setLabel',{@(obj,label) @(label) set(obj,'Label',label)},...
-        'Position',@(obj) '','Obj',@(obj) obj,'mode', 0,'XMLText','');
+        'Position',@(obj) '','Obj',@(obj) obj,'mode', 0,'XMLText','',...
+        'Found',@(obj) isempty(obj.Label));
     
     % YAxis Elementt
     list(5) = struct('type','YAxis','TrueText',@(obj) to_cell(obj.TickLabels,true),...
@@ -543,7 +556,8 @@ if isempty(list)
         'Alignment',PosAligmentSVG{4},...
         'Anchor',PosAnchSVG{4},... 
         'setLabel',{@(obj,label) @(label) set(obj,'TickLabels',label)},...
-        'Position',@(obj) '','Obj',@(obj) obj,'mode', @(obj) (obj.Exponent~=0)*3,'XMLText','');
+        'Position',@(obj) '','Obj',@(obj) obj,'mode', @(obj) (obj.Exponent~=0)*3,'XMLText','',...
+        'Found',@(obj) isempty(obj.TickLabels));
     
     % YY-Plot Element
     list(6) = struct('type','YYAxis','TrueText',@(obj) to_cell(obj.TickLabels,true),...
@@ -551,7 +565,8 @@ if isempty(list)
         'Alignment',PosAligmentSVG{4},...
         'Anchor',PosAnchSVG{4},... 
         'setLabel',{@(obj,label) @(label) set(obj,'TickLabels',label)},...
-        'Position',@(obj) '','Obj',@(obj) obj,'mode', @(obj) (obj.Exponent~=0)*3,'XMLText','');
+        'Position',@(obj) '','Obj',@(obj) obj,'mode', @(obj) (obj.Exponent~=0)*3,'XMLText','',...
+        'Found',@(obj) isempty(obj.TickLabels));
     
     % XAxis
     list(7) = struct('type','XAxis','TrueText',@(obj) to_cell(obj.TickLabels,true),...
@@ -559,7 +574,8 @@ if isempty(list)
         'Alignment',PosAligmentSVG{4},...
         'Anchor',PosAnchSVG{4},... 
         'setLabel',{@(obj,label) @(label) set(obj,'TickLabels',label)},...
-        'Position',@(obj) '','Obj',@(obj) obj,'mode', @(obj) (obj.Exponent~=0)*3,'XMLText','');
+        'Position',@(obj) '','Obj',@(obj) obj,'mode', @(obj) (obj.Exponent~=0)*3,'XMLText','',...
+        'Found',@(obj) isempty(obj.TickLabels));
     
     %ZAxis
     list(8) = struct('type','ZAxis','TrueText',@(obj) to_cell(obj.TickLabels,true),...
@@ -567,7 +583,8 @@ if isempty(list)
         'Alignment',PosAligmentSVG{4},...
         'Anchor',PosAnchSVG{4},... 
         'setLabel',{@(obj,label) @(label) set(obj,'TickLabels',label)},...
-        'Position',@(obj) '','Obj',@(obj) obj,'mode', @(obj) (obj.Exponent~=0)*3,'XMLText','');
+        'Position',@(obj) '','Obj',@(obj) obj,'mode', @(obj) (obj.Exponent~=0)*3,'XMLText','',...
+        'Found',@(obj) isempty(obj.TickLabels));
 end
 
 
@@ -644,6 +661,45 @@ end
 end
 
 %% ------------------------------------------------------------------------
+function Labels = updateAxis(ax,type,Labels)
+% To allow exponents in figures, the data needs to be scaled to an exponent
+% of 0 and set an own exponent label manually
+
+if ax.Exponent == 0
+    return;
+end
+ 
+% Get Label Info
+newLabel = Labels(end);
+newLabel.type = 'Exponent';
+newLabel.TrueText = {sprintf('$\\times 10^{%d}$',ax.Exponent)};
+newLabel.FontSize = ax.FontSize;
+newLabel.Color = ax.Color;
+newLabel.Alignment = 'end';
+newLabel.Anchor = 'start'; 
+newLabel.setLabel = @(label) set(ax.Parent.([type(1),'Ruler']).SecondaryLabel,'String',label);
+newLabel.Position = ax.Exponent;
+newLabel.Obj = ax;
+newLabel.mode = 1;
+newLabel.XMLText = '';
+
+% Rename if needed
+[newLabel, changed] = getShortName(newLabel,newLabel.mode);
+if changed
+    newLabel.setLabel(newLabel.LabelText);
+end
+Labels(length(Labels)+1) = newLabel;
+
+% Scale the data
+limit = ax.Limits;
+for idx = 1:length(ax.Parent.Children)
+    ax.Parent.Children(idx).([type(1),'Data']) = ax.Parent.Children(idx).([type(1),'Data'])./double(10^newLabel.Position);
+end
+ax.Limits = limit./double(10^newLabel.Position);
+ax.Exponent = 0;
+end
+
+%% ------------------------------------------------------------------------
 function updateSVG(filename, Labels, opts)
 
 % Load SVG to memory and change the line breaks
@@ -655,6 +711,13 @@ text = checkForLegend(text, Labels, opts);
 LabelList = {Labels.LabelText};
 
 getLabelIndex = @(label) cellfun(@(x) any(ismember(x,label)),LabelList,'UniformOutput', true);
+getTextLength = @(characters,fontsize) -0.5841 + 0.2686*characters + 0.04056*fontsize + -0.01236*characters.^2 + 0.482*characters.*fontsize;
+if opts.SquishedText
+    squishText = [' matrix(',num2str(opts.SquishFactor),',0,0,1,0,0)'];
+end
+pattern1 = '<text.*?x="([-0-9.]+)".*?y="([-0-9.]+)".*?style="(.*?)".*?>(.*?)<\/text>';
+pattern2 = '(<text.*?x=")[-0-9.]+(".*?y=")[-0-9.]+(".*?style=").*?(".*?>).*?(<\/text>)';
+patternSquish = '(<g transform=")(.*?)(".*?<text.*?x="[-0-9.]+".*?y="[-0-9.]+".*?style=".*?".*?>.*?<\/text>)';
 
 % remove white background
 if opts.RemoveWhiteBackground
@@ -666,32 +729,40 @@ end
 for line_idx = 1:length(text)
     text_line = text{line_idx};
 
+    % Squish each text element
+    if opts.SquishedText
+        text_line = regexprep(text_line, patternSquish, ['$1$2',squishText,'$3']);
+    end
+
     % Search for text elements, extract 4 tokens (x-pos, y-pos, style, text-label)
-    pattern1 = '<text.*?x="([-0-9.]+)".*?y="([-0-9.]+)".*?style="(.*?)".*?>(.*?)<\/text>';
     tokens = regexp(text_line, pattern1,'tokens'); %try to find Text label
     [idxStart,idxEnd] = regexp(text_line,pattern1);
+
     if ~isempty(tokens)
         for idx = length(tokens):-1:1
             FoundLabelText = tokens{idx}{4};
+
             iLabel = getLabelIndex(FoundLabelText); % find label number
             if nnz(iLabel)
                 alignment = Labels(iLabel).Alignment;
                 anchor = Labels(iLabel).Anchor;
                 idxText = ismember(Labels(iLabel).LabelText,FoundLabelText);
                 newText = Labels(iLabel).XMLText{idxText};
+                fontSize = Labels(iLabel).FontSize;
+                Labels(iLabel).Found = true;
+                nFoundLabel = nFoundLabel +1;
             else
                 alignment = 'start';
                 anchor = 'start';
                 newText = FoundLabelText;
+                fontSize = median([Labels.FontSize]);
             end
 
             % XOffset
             XOffset = str2double(tokens{idx}{1});
             if strcmp(anchor,'auto')
-                specialCharacter = arrayfun(@(x) any(x == ''' .'),FoundLabelText);
-                approxLength = sum(specialCharacter)*0.4 + sum(~specialCharacter);
-                approxEnd = 4 + approxLength * Labels(iLabel).FontSize * 0.7;
-                approxCenter = approxLength * Labels(iLabel).FontSize * 0.4;
+                approxEnd = getTextLength(length(FoundLabelText),fontSize);
+                approxCenter = approxEnd/2;
                 if XOffset == 0
                     anchor = 'start';
                 elseif abs(XOffset + approxCenter) < abs(XOffset + approxEnd)
@@ -705,25 +776,23 @@ for line_idx = 1:length(text)
 
             % Create new Style
             newStyle = [tokens{idx}{3},';text-anchor:',anchor,';']; % ';text-align:',alignment
-
+            
             % Create new Offsets
             switch alignment
                 case 'start'
-                    newYOffset = num2str(Labels(iLabel).FontSize*1.12);
+                    newYOffset = num2str(fontSize*1.12);
                 case 'center'
-                    newYOffset = num2str(Labels(iLabel).FontSize*0.44);
+                    newYOffset = num2str(fontSize*0.44);
                 case 'end'
-                    newYOffset = num2str(-Labels(iLabel).FontSize*0.24);
+                    newYOffset = num2str(-fontSize*0.24);
                 case 'auto'
-                    newYOffset = num2str(str2double(tokens{idx}{2}) - Labels(iLabel).FontSize*opts.yCorrFactor);
+                    newYOffset = num2str(str2double(tokens{idx}{2}) - fontSize*opts.yCorrFactor);
             end
 
             % Regular expression replace, everything in the parentheses won't be changed
-            pattern2 = '(<text.*?x=")[-0-9.]+(".*?y=")[-0-9.]+(".*?style=").*?(".*?>).*?(<\/text>)';
             text_line = [text_line(1:idxStart(idx)-1),...
                          regexprep(text_line(idxStart(idx):idxEnd(idx)), pattern2, ['$1',newXOffset,'$2',newYOffset,'$3',newStyle,'$4',newText,'$5']),...
-                         text_line(idxEnd(idx)+1:end)];
-            nFoundLabel = nFoundLabel +1;
+                         text_line(idxEnd(idx)+1:end)];            
         end
     end
 
@@ -736,12 +805,14 @@ end
 fclose(fout);
 if nFoundLabel == 0
     warning(' - Plot2LaTeX.m: No text elements found and updated in the svg-file from "saveas.m". Please check if the Renderer is "painters" and if there are any characters or fonts present that can''t be correctly printed to text with matlab.')
+elseif nnz([Labels.Found]) < length(Labels)
+    warning(' - Plot2LaTeX.m: Not all text elements could be found in the svg-file. Please send a bug report to the github page.')
 end
 end
 
 %% ------------------------------------------------------------------------
 function text = checkForLegend(text, Labels, opts)
-isLegend = arrayfun(@(x)strcmp(x.type,'Legend')&& x.mode == 1,Labels); % check if horizontal
+isLegend = arrayfun(@(x)strcmp(x.type,'Legend')&& x.mode == 1 && strcmp(x.Obj.Box,'on'),Labels); % check if horizontal
 
 % getSVGSize:
 pattern1 = '<rect x="0" width="([0-9]+)" height="([0-9]+)" y="0"';
@@ -767,12 +838,12 @@ for idx_is_legend = find(isLegend)
     factor = height/Labels(idx_is_legend).Position(5);
     currLegendSize = Labels(idx_is_legend).Obj.Position*factor;
     newLegendSize = Labels(idx_is_legend).Position(1:4)*factor;
-    translateStr = sprintf('<g transform="translate(%f,0)">',newLegendSize(1)-currLegendSize(1) + (1-opts.legCorrFactor)*newLegendSize(3));
+    translateStr = sprintf('<g transform="translate(%f,0)">',newLegendSize(1)-currLegendSize(1));
     
-    legend_XPos = currLegendSize(1);
-    legend_YPos = height - currLegendSize(2);
-    legend_dim = newLegendSize(3:4);
-    legend_dim(1) = legend_dim(1)*opts.legCorrFactor;
+    legend_XPos = currLegendSize(1) - opts.legendPadding(3);
+    legend_YPos = height - currLegendSize(2) + opts.legendPadding(2);
+    legend_dim = [newLegendSize(3) + sum(opts.legendPadding([3,4])),currLegendSize(4) + sum(opts.legendPadding([1,2]))];
+%     legend_dim(1) = legend_dim(1)*opts.legCorrFactor;
     newRectangleStr = sprintf('d="M%0.2f %0.2f L%0.2f %0.2f L%0.2f %0.2f L%0.2f %0.2f Z"',legend_XPos,legend_YPos,legend_XPos,legend_YPos-legend_dim(2),legend_XPos + legend_dim(1),legend_YPos-legend_dim(2),legend_XPos+legend_dim(1),legend_YPos);
     pattern3 = 'd="M[0-9]+ [0-9]+ L[0-9]+ [0-9]+ L[0-9]+ [0-9]+ L[0-9]+ [0-9]+ Z"';
     idxList = regexp(text,pattern3);
@@ -916,8 +987,8 @@ dim = length(names);
 
 text = cell(1,dim);
 for i = 1:dim
-    if ~isempty(regexp(names{i},'[^\w\s-]', 'once'))
-        names{i} = regexprep(names{i},'[^\w\s-]','.');
+    if ~isempty(regexp(names{i},'[^\w\s-]||_', 'once'))
+        names{i} = regexprep(names{i},'[^\w\s-]||_','.');
         changed = true;
     end
     switch mode
@@ -934,7 +1005,7 @@ for i = 1:dim
                 end
                 if ~newElementAdded
                     names{i} = [names{i},list2{idx2}];
-                    idx2 = mod(idx2 +1,length(list2));
+                    idx2 = mod(idx2,length(list2))+1;
                     changed = true;
                 end
             end
@@ -961,6 +1032,7 @@ for i = 1:dim
             suffix = '';
             origFormat = LabelElement.Obj.TickLabelFormat;
             doChange = any(ismember(LabelElement.Obj.TickLabels, list));
+            changed = false;
             while doChange
                 suffix = [suffix, '.']; %#ok<AGROW>
                 LabelElement.Obj.TickLabelFormat = [origFormat, suffix];
@@ -968,6 +1040,8 @@ for i = 1:dim
             end
             text = erv(LabelElement.Obj.TickLabels);
             break
+        case 4 % Don't change the value
+            text{i} = names{i};
     end
 end
 LabelElement.LabelText = text;
@@ -1017,7 +1091,7 @@ for idx = 1:dim
     if ~isempty(color) && any(color ~= [0,0,0]) && any(color ~= 0.15)
         text{idx} = ['{\definecolor{col}{rgb}{',num2str(color(1)),',',num2str(color(2)),',',num2str(color(3)),'} \color{col}',text{idx},'}'];
     end
-    if strcmp(opts.FontSizeMode,'fixed') && ~isempty(opts.FontSize) && ~isempty(Label.FontSize) && opts.FontSize ~= Label.FontSize
+    if (strcmp(opts.FontSizeMode,'fixed') && ~isempty(opts.FontSize) && ~isempty(Label.FontSize) && opts.FontSize ~= Label.FontSize) || strcmp(Label.type,'Exponent')
         text{idx} = ['{\fontsize{',num2str(Label.FontSize),'}{',num2str(Label.FontSize*1.2),'}\selectfont ',text{idx},'}'];
     end
     text{idx} = regexprep(text{idx},'\\','\\\\');
@@ -1238,3 +1312,9 @@ end
 %   - added multiple line support for text like titles and axis
 % v 2.3.1 - 28/02/2024
 %   - fixed a bug that results in an error if an invisible axis has no Labels, thanks to Stefanski89
+% v 2.4 - 13/04/2024
+%   - legend padding added as an option, "legCorrFactor" removed
+%   - better horizontal alignment for axis numbers (new function to
+%     predict the text length)
+%   - fixed a bug in getShortName()
+%   - exponents on axis are now better supported

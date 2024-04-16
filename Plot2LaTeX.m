@@ -419,6 +419,7 @@ for i = 1:length(AxeObj) %do similar for axes objects, XTick, YTick, ZTick
     % X-Axis
     Labels = updateAxis(AxeObj(i).XAxis,'XAxis', Labels); % add exponent, etc.
     Labels = addElement(AxeObj(i).XAxis,'XAxis', Labels);
+    Labels = addElement(AxeObj(i).XAxis.SecondaryLabel,'Text', Labels); % is hidden and can therefore not be found automatically
 end
 
 % Set Fontsize of exponents
@@ -574,7 +575,7 @@ if isempty(list)
         'Alignment',PosAligmentSVG{4},...
         'Anchor',PosAnchSVG{4},... 
         'setLabel',{@(obj,label) @(label) set(obj,'TickLabels',label)},...
-        'Position',@(obj) '','Obj',@(obj) obj,'mode', @(obj) (obj.Exponent~=0)*3,'XMLText','',...
+        'Position',@(obj) '','Obj',@(obj) obj,'mode', @(obj) (obj.Exponent~=0||~isempty(obj.SecondaryLabel.String))*3,'XMLText','',...
         'Found',@(obj) isempty(obj.TickLabels));
     
     %ZAxis
@@ -692,6 +693,7 @@ Labels(length(Labels)+1) = newLabel;
 
 % Scale the data
 limit = ax.Limits;
+ax.Label.Units = 'points';
 for idx = 1:length(ax.Parent.Children)
     ax.Parent.Children(idx).([type(1),'Data']) = ax.Parent.Children(idx).([type(1),'Data'])./double(10^newLabel.Position);
 end
@@ -989,6 +991,7 @@ text = cell(1,dim);
 for i = 1:dim
     if ~isempty(regexp(names{i},'[^\w\s-]||_', 'once'))
         names{i} = regexprep(names{i},'[^\w\s-]||_','.');
+        names{i} = regexprep(names{i},'\s{2,}',' ');
         changed = true;
     end
     switch mode
@@ -1318,3 +1321,6 @@ end
 %     predict the text length)
 %   - fixed a bug in getShortName()
 %   - exponents on axis are now better supported
+% v 2.4.1 - 16/04/2024
+%   - SecondaryLabels are now supported (e.g. in DatetimeRulers)
+%   - Fixed a bug that removes labels of axis with exponents unequal to 0

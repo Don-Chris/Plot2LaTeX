@@ -710,6 +710,7 @@ for idx = 1:length(ax.Parent.Children)
 end
 ax.Limits = limit./double(10^newLabel.Position);
 ax.Exponent = 0;
+ax.Parent.([type(1),'Ruler']).SecondaryLabel.Visible = 'on';
 end
 
 %% ------------------------------------------------------------------------
@@ -1342,3 +1343,5 @@ end
 % v 2.4.2 - 08/07/2024
 %   - Checking if the fontName is wrong
 %   - Adding new warning text and errors for better understanding.
+% v 2.4.3 - 08/07/2024
+%   - Fixed a bug with axis-exponents not visible

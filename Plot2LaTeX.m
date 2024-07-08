@@ -148,7 +148,7 @@ function Plot2LaTeX(h_in, filename, varargin)
 %
 % Version:  1.3 - 1.9/ 2.0 - current
 %   Author:    C. Schulte
-%   Date:     27.05.2023
+%   Date:     08.07.2024
 %   Contact:  C.Schulte@irt.rwth-aachen.de
 %
 % Version:  1.10
@@ -319,6 +319,17 @@ if strcmp(opts.FontSizeMode,'set') && ~isempty(opts.FontSize)
     if opts.Verbose(2)
         disp([' - Plot2LaTeX.m: Fontsize of the figure set to "', num2str(opts.FontSize), '".'])
     end
+end
+
+
+%% ---------------- Check FontName ----------------------------------------
+fontNames = get(findall(h,'-property','FontName'),'FontName');
+changedFont = cellfun(@(x) ~strcmp(x,'Helvetica'), fontNames);
+if any(changedFont)
+    if opts.Verbose(2)
+        disp(' - Plot2LaTeX.m: Changing the font to the matlab default fontName ("Helvetica") for exporting reasons. LaTeX will adapt this text with your font automatically.')
+    end
+    set(findall(h,'-property','FontName'),'FontName','Helvetica');
 end
 
 
@@ -806,7 +817,7 @@ for line_idx = 1:length(text)
 end
 fclose(fout);
 if nFoundLabel == 0
-    warning(' - Plot2LaTeX.m: No text elements found and updated in the svg-file from "saveas.m". Please check if the Renderer is "painters" and if there are any characters or fonts present that can''t be correctly printed to text with matlab.')
+    warning(' - Plot2LaTeX.m: No text elements found and updated in the svg-file from "saveas.m". Please check if the Renderer is "painters" and if there are any characters or fonts present that can''t be correctly printed to text with matlab. If this bug persists, send a bug report to the github page.')
 elseif nnz([Labels.Found]) < length(Labels)
     warning(' - Plot2LaTeX.m: Not all text elements could be found in the svg-file. Please send a bug report to the github page.')
 end
@@ -820,6 +831,10 @@ isLegend = arrayfun(@(x)strcmp(x.type,'Legend')&& x.mode == 1 && strcmp(x.Obj.Bo
 pattern1 = '<rect x="0" width="([0-9]+)" height="([0-9]+)" y="0"';
 [tokens] = regexp(text,pattern1,'tokens');
 idx_Valid = find(cellfun(@(x) ~isempty(x),tokens),1);
+if isempty(idx_Valid)
+    error(' - Plot2LaTeX.m: No elements found in the svg file.')
+end
+
 height = str2double(tokens{idx_Valid}{1}{2});
 
 for idx_is_legend = find(isLegend)
@@ -1324,3 +1339,6 @@ end
 % v 2.4.1 - 16/04/2024
 %   - SecondaryLabels are now supported (e.g. in DatetimeRulers)
 %   - Fixed a bug that removes labels of axis with exponents unequal to 0
+% v 2.4.2 - 08/07/2024
+%   - Checking if the fontName is wrong
+%   - Adding new warning text and errors for better understanding.

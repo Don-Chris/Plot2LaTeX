@@ -45,6 +45,16 @@ function Plot2LaTeX(h_in, filename, varargin)
 %                        be set inside the SVG file corresponding to the
 %                        predefined fontsize. Use 'auto' if the prevalent
 %                        font size should be selected.
+%   'FontName':        'auto' (default), 'Helvetica', '', ...
+%                        Option that changes the fontname of all text
+%                        elements in the figure. This is often needed since
+%                        matlab's SVG export doesn't save the text as text
+%                        elements, instead it saves them as line segments
+%                        which would result in the "No text elements found"
+%                        warning message of Plot2LaTeX and an unsuccessful
+%                        export. 'auto' changes the fontname to the default
+%                        font name of matlab. '' (empty string) will result
+%                        in no changes.
 %   'ReplaceList':     '' (default), [a cell with 2 columns, first column: 
 %                        text in figure, second column: new text in .svg]
 %             	         Should a placeholder text in the figure be 
@@ -148,7 +158,7 @@ function Plot2LaTeX(h_in, filename, varargin)
 %
 % Version:  1.3 - 1.9/ 2.0 - current
 %   Author:    C. Schulte
-%   Date:     08.07.2024
+%   Date:     12.07.2024
 %   Contact:  C.Schulte@irt.rwth-aachen.de
 %
 % Version:  1.10
@@ -190,6 +200,15 @@ opts.Renderer = 'painters';
 %       fontsize should be evaluated, use 'fixed', if all text should stay
 %       in the predefined fontsizes 
 opts.FontSize = 'auto';
+
+% 'FontName' = ['auto' (default), 'Helvetica', '', (font name as a char)]
+%        Option that changes the fontname of all text elements in the figure. 
+%        This is often needed since matlab's SVG export doesn't save the text 
+%        as text elements, instead it saves them as line segments which would 
+%        result in the "No text elements found" warning message of Plot2LaTeX
+%        and an unsuccessful export. 'auto' changes the fontname to the default
+%        font name of matlab. '' (empty string) will result in no changes.
+opts.FontName = 'auto';
 
 % Verbose = ['waitbar', 'console', 'both', false] : Should a waitbar appear
 %       to show progress or a console text
@@ -323,13 +342,19 @@ end
 
 
 %% ---------------- Check FontName ----------------------------------------
+if strcmp(opts.FontName,'auto')
+    fontName = get(groot, 'defaultAxesFontName');
+else
+    fontName = opts.FontName;
+end
 fontNames = get(findall(h,'-property','FontName'),'FontName');
-changedFont = cellfun(@(x) ~strcmp(x,'Helvetica'), fontNames);
-if any(changedFont)
+changedFont = cellfun(@(x) ~strcmp(x,fontName), fontNames);
+if any(changedFont) && ~isempty(opts.FontName)
     if opts.Verbose(2)
-        disp(' - Plot2LaTeX.m: Changing the font to the matlab default fontName ("Helvetica") for exporting reasons. LaTeX will adapt this text with your font automatically.')
+        fprintf(' - Plot2LaTeX.m: Changing the font to the fontName ("%s").\n',fontName)
     end
-    set(findall(h,'-property','FontName'),'FontName','Helvetica');
+    
+    set(findall(h,'-property','FontName'),'FontName',fontName);
 end
 
 
@@ -1345,3 +1370,5 @@ end
 %   - Adding new warning text and errors for better understanding.
 % v 2.4.3 - 08/07/2024
 %   - Fixed a bug with axis-exponents not visible
+% v 2.4.4 - 12/07/2024
+%   - "FontName" as an input option added

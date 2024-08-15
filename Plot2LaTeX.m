@@ -420,6 +420,10 @@ if opts.Verbose(2)
     disp(' - Plot2LaTeX.m: Cataloging all text elements.');
 end
 
+for i = 1:length(AxeObj) % Prevent changes in Axes Position through the following changes to the font texts, etc.
+    AxeObj(i).Position = AxeObj(i).Position;
+end
+
 for i = 1:length(TexObj) % do for text, titles and axes labels
     if ~isempty(TexObj(i).String)
         Labels = addElement(TexObj(i),'Text',Labels);
@@ -643,7 +647,7 @@ if any(idxElement)
     [newLabel,changed] = getShortName(newLabel,newLabel.mode);
     
     % Rename if needed
-    if changed
+    if changed && strcmp(newLabel.Obj.Visible,'on')
         newLabel.setLabel(newLabel.LabelText);
     end
     Labels = [Labels,newLabel];
@@ -1372,3 +1376,6 @@ end
 %   - Fixed a bug with axis-exponents not visible
 % v 2.4.4 - 12/07/2024
 %   - "FontName" as an input option added
+% v 2.4.5 - 15/08/2024 
+%   - Fixed a bug where a title text change resulted in a new axes
+%     position.
